@@ -1,0 +1,79 @@
+# Used by Red.
+import aiohttp
+from redbot.core import Config
+
+
+class SteamCalls:
+    """Class for querying the Steam API asynchronically"""
+
+    # t = token, v = vanity url.
+    API_VANITY = "http://api.steampowered.com/ISteamUser/ResolveVanityURL/v1/?key={t}&vanityurl={v}"
+    STEAM_BAD_REQUEST = ":x: Error: The request done to the Steam API was improper.\nRequest: {}"
+    STEAM_NO_MATCH = ":x: Error: That vanity id does not seem to exist. Please check your input."
+    STEAM_TOKEN_NONE = ":x: Error: No token set for the Steam API."
+    STEAM_TOKEN_INVALID = ":x: Error: The Steam API token is invalid."
+
+    CLIENT_ERROR = ":satellite: There was a connection error with the Steam API. Please try the command again."
+    TIMEOUT_ERROR = ":hourglass: The request to the Steam API timed out. This means that the API might be down. " \
+                    "Try to use the 17-digit number instead of the vanity ID, or try again later."
+    UNKNOWN_STATUS_ERROR = "Something went wrong whilst querying the Steam API.\nStatus: {}\n Query: {}"
+
+    def __init__(self, cog):
+        # Load config in order to always have an updated token.
+        self.config = Config.get_conf(cog, identifier=80590423, force_registration=True)
+        self.config.register_global(psy_token=None, steam_token=None)
+
+    async def call_steam_api(self, request_url):
+        """Given an url, call the API using the configured token
+
+        Returns a list if valid, False if invalid, and None if there is no token.
+        Also returns a error if there is one."""
+        try:
+            async with aiohttp.ClientSession() as session:
+                async with session.get(request_url) as response:
+                    resp = response
+            resp_status = resp.status
+            if resp_status == 200:
+                resp_json = await resp.json()
+                to_return = resp_json.get("response")
+                error = None
+            else:  # No valid response.
+                to_return = False
+                if resp_status == 403:
+                    error = self.STEAM_TOKEN_INVALID
+                elif resp_status == 400:
+                    error = self.STEAM_BAD_REQUEST.format(request_url)
+                else:
+                    raise Exception(self.UNKNOWN_STATUS_ERROR.format(resp_status, request_url))
+        except aiohttp.client_exceptions.ClientConnectionError:
+            to_return = False
+            error = self.CLIENT_ERROR
+        except aiohttp.client_exceptions.TimeoutError:
+            to_return = False
+            error = self.TIMEOUT_ERROR
+        return to_return, error
+
+    async def vanity_to_id64(self, vanity_id):
+        """Convert a Steam vanity id into an id64, so that it can be used in the Psyonix API
+
+        Structure of a normal API response if there's a match:
+        {response: {steamid: str, success: 1}}
+
+        Structure of an API response if there's no match:
+        {response: {message: "No match", success: 42}}
+        """
+        token = await self.config.steam_token()
+        if token is None:
+            to_return = False
+            notice = self.STEAM_TOKEN_NONE
+        else:
+            request_url = self.API_VANITY.format(t=token, v=vanity_id)
+            resp_dict, notice = await self.call_steam_api(request_url)
+
+            if notice:  # Error by call_steam_api.
+                to_return = False
+            else:  # Response is a dict.
+                to_return = resp_dict.get("steamid", False)
+                if not to_return:  # No match found for steamid.
+                    notice = self.STEAM_NO_MATCH
+        return to_return, notice
