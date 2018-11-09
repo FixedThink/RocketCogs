@@ -3,7 +3,7 @@ import re
 
 # Used by Red.
 import discord
-from discord.ext import commands
+from redbot.core import commands  # Changed from discord.ext
 from redbot.core import checks, Config, data_manager
 
 # Local files.
@@ -12,7 +12,10 @@ from .steam_calls import SteamCalls
 from .db_queries import DbQueries
 
 
-class LaFusee:
+BaseCog = getattr(commands, "Cog", object)
+
+
+class LaFusee(BaseCog):
     """Rocket League rank commands."""
     # TODO: move methods and their constants to a separate file.
     # Constants.

@@ -22,6 +22,7 @@ class SteamCalls:
         # Load config in order to always have an updated token.
         self.config = Config.get_conf(cog, identifier=80590423, force_registration=True)
         self.config.register_global(psy_token=None, steam_token=None)
+        self.session = aiohttp.ClientSession()
 
     async def call_steam_api(self, request_url):
         """Given an url, call the API using the configured token
@@ -29,12 +30,21 @@ class SteamCalls:
         Returns a list if valid, False if invalid, and None if there is no token.
         Also returns a error if there is one."""
         try:
-            async with aiohttp.ClientSession() as session:
-                async with session.get(request_url) as response:
-                    resp = response
-            resp_status = resp.status
-            if resp_status == 200:
-                resp_json = await resp.json()
+            async with self.session.get(request_url) as response:
+                resp = response
+                resp_status = resp.status
+                if resp_status == 200:
+                    resp_json = await resp.json()
+                else:
+                    resp_json = None
+        except aiohttp.client_exceptions.ClientConnectionError:
+            to_return = False
+            error = self.CLIENT_ERROR
+        except aiohttp.client_exceptions.ServerTimeoutError:
+            to_return = False
+            error = self.TIMEOUT_ERROR
+        else:
+            if resp_json is not None:
                 to_return = resp_json.get("response")
                 error = None
             else:  # No valid response.
@@ -45,12 +55,6 @@ class SteamCalls:
                     error = self.STEAM_BAD_REQUEST.format(request_url)
                 else:
                     raise Exception(self.UNKNOWN_STATUS_ERROR.format(resp_status, request_url))
-        except aiohttp.client_exceptions.ClientConnectionError:
-            to_return = False
-            error = self.CLIENT_ERROR
-        except aiohttp.client_exceptions.TimeoutError:
-            to_return = False
-            error = self.TIMEOUT_ERROR
         return to_return, error
 
     async def vanity_to_id64(self, vanity_id):

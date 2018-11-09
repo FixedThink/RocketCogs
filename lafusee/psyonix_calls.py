@@ -26,6 +26,7 @@ class PsyonixCalls:
         # Load config in order to always have an updated token.
         self.config = Config.get_conf(cog, identifier=80590423, force_registration=True)
         self.config.register_global(psy_token=None, steam_token=None)
+        self.session = aiohttp.ClientSession()
 
     # Events
 
@@ -35,7 +36,6 @@ class PsyonixCalls:
 
         Returns a list if valid, False if invalid, and None if there is no token.
         Also returns a error if there is one."""
-        error = None
         token = await self.config.psy_token()
         if token is None:
             to_return = False
@@ -43,16 +43,25 @@ class PsyonixCalls:
         else:
             headers = {"Authorization": token}
             try:
-                async with aiohttp.ClientSession(headers=headers) as session:
-                    async with session.get(request_url) as response:
+                async with self.session.get(request_url, headers=headers) as response:
                         resp = response
-                resp_status = resp.status
-                if resp_status == 200:  # Valid response.
-                    resp_json = await resp.json()
-                    print(resp_json)
+                        resp_status = resp.status
+                        if resp_status == 200:   # Valid response.
+                            resp_json = await resp.json()
+                        else:
+                            resp_json = None
+            except aiohttp.client_exceptions.ClientConnectionError:
+                to_return = False
+                error = self.CLIENT_ERROR
+            except aiohttp.client_exceptions.ServerTimeoutError:
+                to_return = False
+                error = self.TIMEOUT_ERROR
+            else:
+                if resp_json is not None:
                     if isinstance(resp_json, list):
                         resp_json = resp_json[0]
                     to_return = resp_json
+                    error = None
                 else:
                     to_return = False
                     if resp_status == 401:
@@ -61,12 +70,6 @@ class PsyonixCalls:
                         error = self.PLAYER_ERROR
                     else:
                         raise Exception(self.UNKNOWN_STATUS_ERROR.format(resp_status, request_url))
-            except aiohttp.client_exceptions.ClientConnectionError:
-                to_return = False
-                error = self.CLIENT_ERROR
-            except aiohttp.client_exceptions.TimeoutError:
-                to_return = False
-                error = self.TIMEOUT_ERROR
         return to_return, error
 
     async def player_skills(self, platform: str, valid_id) -> tuple:
