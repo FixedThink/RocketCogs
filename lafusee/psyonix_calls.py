@@ -14,8 +14,8 @@ class PsyonixCalls:
     PSY_TOKEN_NONE = ":x: Error: No token set for the Psyonix API."
     PSY_TOKEN_INVALID = ":x: Error: The Psyonix API token is invalid."
 
-    PLAYER_ERROR = ":x: Error: That ID is not associated with an account that has played Rocket League. " \
-                   "Please check your input."
+    PLAYER_ERROR = ":x: Error: That ID is not associated with an account that has played Rocket League.\n" \
+                   "Please make sure the right account is used."
     CLIENT_ERROR = ":satellite: There was a connection error with the Rocket League API. " \
                    "Please try the command again in 10 seconds."
     TIMEOUT_ERROR = ":hourglass:  The request to the Rocket League API timed out. " \
@@ -28,9 +28,6 @@ class PsyonixCalls:
         self.config.register_global(psy_token=None, steam_token=None)
         self.session = aiohttp.ClientSession()
 
-    # Events
-
-    # Commands
     async def call_psyonix_api(self, request_url: str) -> tuple:
         """Given an url, call the API using the configured token
 
@@ -101,7 +98,3 @@ class PsyonixCalls:
         else:
             to_return = response.get("titles", False)
         return to_return, notice
-
-    # Utilities
-
-    # Config 

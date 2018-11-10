@@ -5,6 +5,7 @@ import re
 import discord
 from redbot.core import commands  # Changed from discord.ext
 from redbot.core import checks, Config, data_manager
+import redbot.core.utils.menus as red_menu
 
 # Local files.
 from .psyonix_calls import PsyonixCalls
@@ -17,7 +18,7 @@ BaseCog = getattr(commands, "Cog", object)
 
 class LaFusee(BaseCog):
     """Rocket League rank commands."""
-    # TODO: move methods and their constants to a separate file.
+    # TODO: move some (static) methods and their constants to a separate file.
     # Constants.
     EMBED_DIVMOD_COLOURS = {0: 0xca8700, 1: 0xdadada, 2: 0x909090, 3: 0xddbb20, 4: 0x10bbee,
                             5: 0x10abcd, 6: 0xaa60dd, 7: 0x602090}
@@ -29,37 +30,61 @@ class LaFusee(BaseCog):
     PS4_NAMES = {"ps4", "psn"}
     XBOX_NAMES = {"xbox", "xb1", "xboxone"}
     SWITCH_NAMES = {"switch", "nintendo", "swi", "nintendoswitch"}
-
+    # Playlist tuples, sets, and dicts.
     PLAYLIST_ID_TO_NAME = {0: "Casual", 10: "Ranked Duel 1v1", 11: "Ranked Doubles 2v2",
-                           12: "Ranked Solo Standard 3v3", 13: "Ranked Standard 3v3"}
-    PLAYLIST_ID_MINIMAL = {0: "Casual", 10: "Duels", 11: "Doubles", 12: "Solo 3s", 13: "Standard"}
-    PLAYLIST_ID_SHORT = {0: "Casual", 10: "1s", 11: "2s", 12: "s3s", 13: "3s"}
+                           12: "Ranked Solo Standard 3v3", 13: "Ranked Standard 3v3", 27: "Ranked Hoops",
+                           28: "Ranked Rumble", 29: "Ranked Dropshot", 30: "Ranked Snowday"}
+    PLAYLIST_ID_MINIMAL = {0: "Casual", 10: "Duels", 11: "Doubles", 12: "Solo 3s", 13: "Standard",
+                           27: "Hoops", 28: "Rumble", 29: "Dropshot", 30: "Snowday"}
+    PLAYLIST_ID_SHORT = {0: "Casual", 10: "1s", 11: "2s", 12: "s3s", 13: "3s", 27: "H🏀", 28: "R🥊", 29: "D⚡", 30: "S❄"}
+    PLAYLIST_IDS = (0, 10, 11, 12, 13, 27, 28, 29, 30)
+
+    # Emotes used in constants.
+    BIN = ":put_litter_in_its_place: "
+    ERROR = ":x: Error: "
+    DONE = ":white_check_mark: "
     # Token command notices.
     TOKEN_ADDED = "Successfully set the token for the {} API."
     TOKEN_DELETED = "Successfully cleared the token for the {} API."
-    TOKEN_NONE = ":x: Error: No token set."
+    TOKEN_NONE = ERROR + "No token set."
     TOKEN_NOT_SET = TOKEN_NONE + "Which makes deleting it a little complicated."
-    TOKEN_LEN_ERROR = ":x: Error: The token you put in is not as long as the accepted token size ({})."
-    TOKEN_HEX_ERROR = ":x: Error: Your input does not seem to be hexadecimal."
+    TOKEN_LEN_ERROR = ERROR + "The token you put in is not as long as the accepted token size ({})."
+    TOKEN_HEX_ERROR = ERROR + "Your input does not seem to be hexadecimal."
     TOKEN_NOT_PRIVATE = ":warning: Because of safety reasons, please send the bot this command in DMs. Input ignored."
-    TOKEN_INVALID = ":x: Error: Token is invalid."
+    TOKEN_INVALID = ERROR + "Token is invalid."
     # RL rank role constants.
-    ROLE_DISABLED = ":put_litter_in_its_place: Successfully disabled the RL rank role functionality for this server."
-    ROLE_ENABLED = ":white_check_mark: Successfully enabled the RL rank role functionality for this server."
-    ROLESET_SUCCESS = ":white_check_mark: Successfully added all roles!"
-    ROLE_NOT_ENABLED = "Don't forget to enable the RL rank role functionality by doing `{}{}`"
-    ROLE_NOT_COMPLETE = "You can either add each missing role individually using `{}{}`, " \
+    R_CONF_DISABLED = BIN + "Successfully disabled the RL rank role functionality for this server."
+    R_CONF_ENABLED = DONE + "Successfully enabled the RL rank role functionality for this server."
+    R_CONF_SUCCESS = DONE + "Successfully added all roles!"
+    R_CONF_NOT_ENABLED = "Don't forget to enable the RL rank role functionality by doing `{}{}`"
+    R_CONF_INCOMPLETE = "You can either add each missing role individually using `{}{}`, " \
                         "or rerun this command when all roles are set up."
+    # Link account constants.
+    LINK_SUCCESS = DONE + "Successfully linked your {} ID with this account!"
+    LINK_REMOVED = BIN + "Successfully unlinked your {} ID from this account."
+    LINK_AND_RANKROLE_REMOVED = LINK_REMOVED + "\nIf you had any rank roles, these were removed as well."  # 1 {}
+    LINK_REMOVE_PROMPT = "**Are you sure you want to unlink your account?**\n" \
+                         "Keep in mind that you __don't__ have to unlink your account to update it.\n" \
+                         "If you are sure, resend this command, but with `yes` at the end, to unlink your {} ID. " \
+                         "No action needed otherwise. {}"
+    LINK_ROLE_INTACT = "You already seem to have the right rank role, so nothing changed there."
+    LINK_ROLE_ADDED = "You also received a rank role of the highest rank of the account you just linked!"
+    LINK_ROLE_UNRANKED = "Unfortunately, you do not seem to have any rank, meaning that you cannot receive a rank role."
+    LINK_ROLES_UPDATED = "Your rank roles are updated with the highest rank of the account you just linked!"
+    # General user link errors.
+    USER_NOT_REGISTERED = ERROR + "This user has not registered their account!"
+    AUTHOR_NOT_REGISTERED = ERROR + "You do not have a registered account."
+    AUTHOR_REGISTER_PROMPT = AUTHOR_NOT_REGISTERED + "\nUse `{}{}` to register one."
     # Other API constants.
     PSY_TOKEN_LEN = 40
     STEAM_TOKEN_LEN = 32
     # Minimal embed constants.
-    MINIMAL_ONLY_MMR = "`{:<8}\u200b`  **{:0.2f}**"
-    MINIMAL_RANKED = "`{ls:<8}\u200b`  **{n:0.2f}**  ({bold}{tier_div}{bold})"
-    MINIMAL_NO_MATCHES = "`{:<8}\u200b`  *No matches played*"
+    MINIMAL_ONLY_MMR = "`{:⠀<8}`  **{:0.2f}**"  # Padding character is a Braille space.
+    MINIMAL_RANKED = "`{ls:⠀<8}`  **{n:0.2f}**  ({bold}{tier_div}{bold})"
+    MINIMAL_NO_MATCHES = "`{:⠀<8}`  *No matches played*"
     # Other constants.
     STEAM_PROFILE_URL = "https://steamcommunity.com/profiles/{}"
-    ID64_NON_NUMERIC = ":x: Error: `/profiles/` links must have a fully numeric id!"
+    ID64_NON_NUMERIC = ERROR + "`/profiles/` links must have a fully numeric id!"
 
     def __init__(self, bot):
         self.bot = bot
@@ -74,14 +99,20 @@ class LaFusee(BaseCog):
         self.link_db = DbQueries(self.PATH_DB)
 
     # Configuration commands.
+    @checks.admin_or_permissions(administrator=True)
+    @commands.group(name="rl_setup", invoke_without_command=True)
+    async def _rl_setup(self, ctx):
+        """Configure the cog's configuration for this server"""
+        await ctx.send_help()
+
     @checks.mod_or_permissions(administrator=True)
-    @commands.group(name="rl_api", invoke_without_command=True)
-    async def _api_config(self, ctx):
+    @_rl_setup.group(name="api", invoke_without_command=True)
+    async def _api_setup(self, ctx):
         """Configure the API keys needed for the RL commands"""
         await ctx.send_help()
 
-    @_api_config.command()
-    @checks.mod_or_permissions(administrator=True)
+    @_api_setup.command()
+    @checks.admin_or_permissions(administrator=True)
     async def set_psyonix_token(self, ctx, token):
         """Configures the token required to query the Psyonix API
 
@@ -106,8 +137,8 @@ class LaFusee(BaseCog):
                 notice = self.TOKEN_LEN_ERROR.format(self.PSY_TOKEN_LEN)
         await ctx.send(notice)
 
-    @_api_config.command()
-    @checks.mod_or_permissions(administrator=True)
+    @_api_setup.command()
+    @checks.admin_or_permissions(administrator=True)
     async def delete_psyonix_token(self, ctx):
         """Removes the currently set token from the config"""
         token = await self.config.psy_token()
@@ -118,8 +149,8 @@ class LaFusee(BaseCog):
             notice = self.TOKEN_NOT_SET
         await ctx.send(notice)
 
-    @_api_config.command()
-    @checks.mod_or_permissions(administrator=True)
+    @_api_setup.command()
+    @checks.admin_or_permissions(administrator=True)
     async def set_steam_token(self, ctx, token):
         """Configures the token required to query the Steam API
 
@@ -143,8 +174,8 @@ class LaFusee(BaseCog):
                 notice = self.TOKEN_LEN_ERROR.format(self.STEAM_TOKEN_LEN)
         await ctx.send(notice)
 
-    @_api_config.command()
-    @checks.mod_or_permissions(administrator=True)
+    @_api_setup.command()
+    @checks.admin_or_permissions(administrator=True)
     async def delete_steam_token(self, ctx):
         """Removes the currently set token from the config"""
         token = await self.config.steam_token()
@@ -155,28 +186,22 @@ class LaFusee(BaseCog):
             notice = self.TOKEN_NOT_SET
         await ctx.send(notice)
 
-    @checks.mod_or_permissions(administrator=True)
-    @commands.group(name="rl_role", invoke_without_command=True)
-    async def _rl_role(self, ctx):
-        """Configure the RL rank role configuration for this server"""
-        await ctx.send_help()
-
-    @_rl_role.command(name="toggle")
-    @checks.mod_or_permissions(administrator=True)
+    @_rl_setup.command(name="toggle_roles")
+    @checks.admin_or_permissions(administrator=True)
     async def toggle_rl_role(self, ctx):
         """Toggles the RL rank role functionality"""
         is_enabled = await self.config.guild(ctx.guild).rankrole_enabled()
         if is_enabled:
-            to_send = self.ROLE_DISABLED
+            to_send = self.R_CONF_DISABLED
         else:
-            to_send = self.ROLE_ENABLED
+            to_send = self.R_CONF_ENABLED
         # Set rankrole_enabled as the inverse of is_enabled (as this command is a toggle).
         await self.config.guild(ctx.guild).rankrole_enabled.set(not is_enabled)
         await ctx.send(to_send)
 
-    @_rl_role.command(name="set")
-    @checks.mod_or_permissions(administrator=True)
-    async def set_rl_role(self, ctx, mode: str):
+    @_rl_setup.command(name="set_roles")
+    @checks.admin_or_permissions(administrator=True)
+    async def set_rl_roles(self, ctx, mode: str):
         """Toggles the RL rank role functionality
 
         There are two possible modes:
@@ -196,9 +221,10 @@ class LaFusee(BaseCog):
                     role_name = self.get_tier_name(i)
                     new_role = await gld.create_role(name=role_name, colour=role_colour, hoist=True)
                     role_dict[i] = new_role.id
-                    if i % 5 == 0:
-                        await ctx.send(f"{i} out of 19 roles done.")
-                to_say = self.ROLESET_SUCCESS
+                    progress_n = 20 - i
+                    if progress_n % 5 == 0:
+                        await ctx.send(f"{progress_n} out of 19 roles done.")
+                to_say = self.R_CONF_SUCCESS
             await self.config.guild(gld).rankrole_dict.set(role_dict)
         elif low_mode == "detect":
             role_dict = {}
@@ -216,49 +242,139 @@ class LaFusee(BaseCog):
                     role_dict[i] = None
                     say_list.append(f":x: Did not find a role for {tier_str}")
             if matches < 19:
-                comment = self.ROLE_NOT_COMPLETE  # TODO: add manual command.
+                comment = self.R_CONF_INCOMPLETE  # TODO: add manual command.
             elif await self.config.guild(gld).rankrole_enabled() is False:
-                comment = self.ROLE_NOT_ENABLED.format(ctx.prefix, self.toggle_rl_role.qualified_name)
+                comment = self.R_CONF_NOT_ENABLED.format(ctx.prefix, self.toggle_rl_role.qualified_name)
             else:
-                comment = self.ROLESET_SUCCESS
+                comment = self.R_CONF_SUCCESS
             to_say = "**Total matches:** {} out of 19\n{}\n\n{}".format(matches, comment, "\n".join(say_list))
             await self.config.guild(gld).rankrole_dict.set(role_dict)
         else:
             to_say = ":x: Error: Invalid mode."
         await ctx.send(to_say)
 
-    # Request commands.
-    @commands.command(name="lfg")
-    @checks.mod_or_permissions(administrator=True)
-    async def minimal(self, ctx, platform, profile_id):
-        """Minimal embed test"""
+    # Registration commands.
+    @commands.command(name="rl_link")
+    async def register_tag(self, ctx, platform, profile_id):
+        """Register (or update) your gamer account for use in other commands"""
+        gld = ctx.guild
+        url_platform, url_id, notice = await self.platform_id_bundle(platform, profile_id)
+        if not notice:  # Platform and ID valid!
+            author = ctx.author
+            username = "{}#{}".format(author.name, author.discriminator)
+            await self.link_db.insert_user(author.id, username, url_platform, url_id)
+            cap_platform = url_platform.capitalize()
+            link_say = self.LINK_SUCCESS.format(cap_platform)
+
+            rankrole_enabled = await self.config.guild(gld).rankrole_enabled()
+            if rankrole_enabled is False:
+                to_say = link_say
+            else:  # Rank roles are enabled.
+                # Check their highest roles, and give a role if this is not unranked.
+                response, error = await self.psy_api.player_skills(url_platform, url_id)
+                player_skills = response.get("player_skills")
+                best_tier, best_list_id, played_lists = self.best_playlist(player_skills)
+                if best_tier == 0:  # Unranked, so no actual highest rank.
+                    role_say = self.LINK_ROLE_UNRANKED
+                else:  # Does have a rank.
+                    rankrole_dict = await self.config.guild(gld).rankrole_dict()
+                    highest_id = rankrole_dict.get(str(best_tier), None)
+                    if highest_id is None:
+                        # Rank roles are not configured / stored properly...
+                        role_say = "The role you are supposed to get does not exist... Contact a staff member."
+                        pass
+                    else:
+                        # TODO: Test various cases with missing rank roles.
+                        role_to_add = discord.utils.get(gld.roles, id=highest_id)
+                        # Check if any (old) rank roles should be removed first.
+                        roles = author.roles
+                        rankrole_ids = {r_id for r_id in rankrole_dict.values() if r_id is not None}
+                        author_rankroles = [r for r in roles if r.id in rankrole_ids]
+                        if author_rankroles == [role_to_add]:
+                            # Author already has the exact rank role he should have, and no other rank roles.
+                            role_say = self.LINK_ROLE_INTACT
+                        elif len(author_rankroles) > 0:
+                            # Remove all rank roles, except the role that is supposed to be added.
+                            to_remove = [r for r in author_rankroles if r.id != highest_id]
+                            await author.remove_roles(*to_remove)
+                            if highest_id not in author_rankroles:
+                                await author.add_roles(role_to_add)
+                            role_say = self.LINK_ROLES_UPDATED
+                        else:  # No current rank roles.
+                            await author.add_roles(role_to_add)
+                            role_say = self.LINK_ROLE_ADDED
+                to_say = "\n".join((link_say, role_say))
+        else:
+            to_say = notice
+        await ctx.send(to_say)
+
+    @commands.command(name="rl_unlink")
+    async def de_register_tag(self, ctx, confirmation: bool = False):
+        """De-register your gamer account for use in other commands"""
+        gld = ctx.guild
+        author = ctx.author
+        author_id = author.id
+
+        url_platform, url_id = await self.link_db.select_user(author_id)
+        if url_platform is None and url_id is None:
+            to_say = self.AUTHOR_NOT_REGISTERED
+        else:
+            cap_platform = url_platform.capitalize()
+            if not confirmation:
+                to_say = self.LINK_REMOVE_PROMPT.format(cap_platform, author.mention)
+            else:
+                await self.link_db.delete_user(author_id)
+                rankrole_enabled = await self.config.guild(gld).rankrole_enabled()
+                if rankrole_enabled is False:
+                    to_say = self.LINK_REMOVED.format(cap_platform)
+                else:
+                    # Remove any leftover rank roles.
+                    roles = author.roles
+                    rankrole_dict = await self.config.guild(gld).rankrole_dict()
+                    rankrole_ids = {r_id for r_id in rankrole_dict.values() if r_id is not None}
+                    to_remove = [r for r in roles if r.id in rankrole_ids]
+                    if len(to_remove) > 0:
+                        await author.remove_roles(*to_remove)
+                    to_say = self.LINK_AND_RANKROLE_REMOVED.format(cap_platform)
+        await ctx.send(to_say)
+
+    # Rank lookup commands.
+    @commands.group(name="lfg", invoke_without_command=True)
+    async def _lfg_embed(self, ctx, platform, profile_id):
+        """Show a ranking in LFG embed format"""
         url_platform, url_id, notice = await self.platform_id_bundle(platform, profile_id)
         if not notice:
-            query, notice = await self.psy_api.player_skills(url_platform, url_id)
+            response, notice = await self.psy_api.player_skills(url_platform, url_id)
             if not notice:
-                player_name = query["user_name"]
-                player_skills = query.get("player_skills")
-                if not player_skills:  # Debug exception.
-                    raise Exception("lfg -> No player skills")
-                # TODO: make everything below this line a method, in order to support `[p]lfg me` later on.
-                best_tier, best_list_id, played_lists = self.best_playlist(player_skills)
-                unplayed_lists = {n for n in (0, 10, 11, 12, 13) if n not in played_lists}
-                # Create rows for each playlist.
-                rank_summary = self.rank_summary_str(player_skills, best_list_id, unplayed_lists)
-                # Create embed, whilst using the highest tier's colour.
-                embed = discord.Embed()
-                embed.colour = self.get_tier_colour(best_tier)
-                # Set author and description. Profile links only exist for Steam.
-                player_url = self.STEAM_PROFILE_URL.format(query["user_id"]) \
-                    if url_platform == "steam" else discord.Embed.Empty
-                embed.set_author(name="Rocket League Stats - {}".format(player_name), url=player_url)
-                embed.description = rank_summary
-                await ctx.send(embed=embed)
+                embeds = self.make_lfg_embed(response, url_platform)
+                await red_menu.menu(ctx, embeds, red_menu.DEFAULT_CONTROLS, timeout=60.0)
+        if notice:
+            await ctx.send(notice)
+
+    @_lfg_embed.command(name="user")
+    async def lfg_user(self, ctx, user: discord.Member = None):
+        """Show the LFG embed of a member on this server
+
+        If no user is provided, it will show your own."""
+        if user is None:
+            user = ctx.author
+
+        url_platform, url_id = await self.link_db.select_user(user.id)
+        if None in (url_platform, url_id):  # User is not properly registered.
+            if user == ctx.author:
+                notice = self.AUTHOR_REGISTER_PROMPT.format(ctx.prefix, self.register_tag.qualified_name)
+            else:
+                notice = self.USER_NOT_REGISTERED
+        else:  # Valid registration.
+            response, notice = await self.psy_api.player_skills(url_platform, url_id)
+            if not notice:
+                embeds = self.make_lfg_embed(response, url_platform, user)
+                await red_menu.menu(ctx, embeds, red_menu.DEFAULT_CONTROLS, timeout=60.0)
         if notice:
             await ctx.send(notice)
 
     # Debug commands.
-    @checks.is_owner()
+    @checks.mod_or_permissions(administrator=True)
     @commands.group(name="rltest", invoke_without_command=True)
     async def _tests(self, ctx):
         """Debug commands for the RL module"""
@@ -295,7 +411,7 @@ class LaFusee(BaseCog):
             await ctx.send(notice)
 
     @_tests.command(name="raw")
-    @checks.is_owner()
+    @checks.mod_or_permissions(administrator=True)
     async def raw_skills(self, ctx, platform, profile_id):
         """Used for seeing the response of a PlayerSkills query"""
         url_platform, url_id, notice = await self.platform_id_bundle(platform, profile_id)
@@ -308,21 +424,21 @@ class LaFusee(BaseCog):
             await ctx.send(notice)
 
     @_tests.command(name="vanity")
-    @checks.is_owner()
+    @checks.mod_or_permissions(administrator=True)
     async def test_vanity(self, ctx, vanity_id):
         """Used for testing the Steam API vanity id conversion"""
         response, notice = await self.steam_api.vanity_to_id64(vanity_id)
         await ctx.send("{}\n{}".format(response, notice))
 
     @_tests.command(name="user_bundle")
-    @checks.is_owner()
+    @checks.mod_or_permissions(administrator=True)
     async def test_platform_id_bundle(self, ctx, platform, profile_id):
         """Used for testing the platform - gamerID bundle"""
         url_platform, url_id, notice = await self.platform_id_bundle(platform, profile_id)
         await ctx.send("{} - {} \n{}".format(url_platform, url_id, notice))
 
     @_tests.command(name="re")
-    @checks.is_owner()
+    @checks.mod_or_permissions(administrator=True)
     async def test_regex_split(self, ctx, steam_url):
         """Used for testing regex for the platform bundle"""
         id_split = re.split(r'/id/', steam_url, maxsplit=1)
@@ -337,11 +453,20 @@ class LaFusee(BaseCog):
         await ctx.send(to_say)
 
     @_tests.command(name="colour")
+    @checks.mod_or_permissions(administrator=True)
     async def test_embed_colour(self, ctx, hex_code):
         """Test embed colours"""
         embed = discord.Embed(title="Tell me, black or white?", colour=int(hex_code, 16))
         embed.description = "Hi\nHELLLLOOOOOOO\nOk."
         embed.set_footer(text="Hex code: {}".format(hex_code))
+        await ctx.send(embed=embed)
+
+    @_tests.command(name="block")
+    @checks.mod_or_permissions(administrator=True)
+    async def test_embed_soft_code_block(self, ctx, text):
+        """Test embed colours"""
+        embed = discord.Embed(title="Test embed")
+        embed.description = "`{}`".format(text)
         await ctx.send(embed=embed)
 
     # Utilities
@@ -420,7 +545,7 @@ class LaFusee(BaseCog):
             best_list_id = None
         return best_tier, best_list_id, played_lists
 
-    def rank_summary_str(self, player_skills: dict, best_list_id: int, unplayed_lists: set) -> str:
+    def rank_summary_str(self, player_skills: dict, best_list_id: int, unplayed_lists: set) -> (str, str):
         """Return a string with a player's summarized rank in a given playlist
 
         player_skills must be a dict that is provided by the API, or None if there are no stats.
@@ -445,8 +570,37 @@ class LaFusee(BaseCog):
         for n in unplayed_lists:
             playlist = self.PLAYLIST_ID_MINIMAL[n]
             desc_rows[n] = self.MINIMAL_NO_MATCHES.format(playlist)
-        to_return = "\n".join(v for k, v in sorted(desc_rows.items()))
-        return to_return
+        # Split list into normal and special (to make menu-embed possible)
+        normal_lists, special_lists = [], []
+        for k, v in sorted(desc_rows.items()):
+            normal_lists.append(v) if k < 20 else special_lists.append(v)
+        return "\n".join(normal_lists), "\n".join(special_lists)
+
+    def make_lfg_embed(self, response: dict, url_platform: str, user: discord.Member = None) -> list:
+        """Make the embed for the LFG commands."""
+        player_name = response["user_name"]
+        player_skills = response.get("player_skills")
+        if not player_skills:  # Debug exception.
+            raise Exception("lfg -> No player skills")
+        best_tier, best_list_id, played_lists = self.best_playlist(player_skills)
+        unplayed_lists = {n for n in self.PLAYLIST_IDS if n not in played_lists}
+        # Create rows for each playlist.
+        summary_tuple = self.rank_summary_str(player_skills, best_list_id, unplayed_lists)
+
+        # Set author and description. Profile links only exist for Steam.
+        player_url = self.STEAM_PROFILE_URL.format(response["user_id"]) \
+            if url_platform == "steam" else discord.Embed.Empty
+        # Create embed, whilst using the highest tier's colour.
+        return_list = []
+        for summary in summary_tuple:
+            embed = discord.Embed()
+            embed.colour = self.get_tier_colour(best_tier)
+            embed.set_author(name="Rocket League Stats - {}".format(player_name), url=player_url)
+            embed.description = summary
+            if user:
+                embed.set_footer(text=f"ID: {user.id}", icon_url=user.avatar_url_as(static_format="png"))
+            return_list.append(embed)
+        return return_list
 
     def get_tier_colour(self, tier_n: int):
         """Get the colour for the rank embed based on a tier number."""
