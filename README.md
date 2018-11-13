@@ -1,15 +1,15 @@
 # RocketCogs
 
-This repository is for Rocket-League related cogs for [RedBot V3](https://github.com/Twentysix26/Red-DiscordBot). RedBot V3 is a Discord bot using the latest version of discord.py.
+This repository is for Rocket-League related cogs for [RedBot V3](https://github.com/Twentysix26/Red-DiscordBot), which is a bot using the latest version of discord.py.
 
 
 # About the cogs
 
 ## la_fusee
 
-La Fusée (French for "The Rocket") is the project name for the cog that contains various commands related to Rocket League user stats. The cog's core functionalities are similar to RankCog and SetProfile cogs (both on V2 of RedBot), used on the Rocket League Coaching Discord. However, it is rewritten from scratch, and unified in order to make additional features possible.
+La Fusée (French for "The Rocket") is the project name for the cog that contains various commands related to Rocket League user stats. The cog's core functions are similar to RankCog and SetProfile cogs (both on V2 of RedBot), used on the Rocket League Coaching Discord. However, it is rewritten from scratch, and unified in order to make additional features possible.
 
-This cog allows users to check their ranks (or those of others), by either specifying someone's platform and ID. Additionally, users can register their gamer ID (Steam, PlayStation 4, or XBox), and use that to get their Rocket League stats.
+This cog allows users to check their ranks (or those of others), by either specifying someone's platform and ID. Additionally, users can register their gamer ID (Steam, PlayStation 4, or Xbox), and use that to get their Rocket League stats.
 
 #### Stat checking
 Various ways of displaying one's stats are planned. As the cog is currently in development, only one of them is ready thus far.
@@ -24,5 +24,5 @@ Other planned commands include:
 
 
 #### Rank roles
-In addition to the account registration, this cog has a built-in rank role feature. This feature allows a server to automatically assign a rankrole to its members when they register their account. For this, the guild staff can either manually create the roles, and make the bot automatically detect them, or let the bot make the roles needed for them.
-Thhe rank role functionality is optional, and is turned off by default.
+In addition to the account registration, this cog has a built-in rank role feature. This feature allows a guild to automatically assign a rank role to its members when they register their account. For this, the guild staff can either manually create the roles, and make the bot automatically detect them, or let the bot make the roles needed for them.
+The rank role functionality is optional, and is turned off by default.

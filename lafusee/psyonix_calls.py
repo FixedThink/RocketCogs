@@ -12,13 +12,14 @@ class PsyonixCalls:
     API_TITLES = API_URL + "playertitles/{uid}"  # {} * 2
 
     PSY_TOKEN_NONE = ":x: Error: No token set for the Psyonix API."
-    PSY_TOKEN_INVALID = ":x: Error: The Psyonix API token is invalid."
-
+    # Constants based on status codes.
     PLAYER_ERROR = ":x: Error: That ID is not associated with an account that has played Rocket League.\n" \
-                   "Please make sure the right account is used."
-    CLIENT_ERROR = ":satellite: There was a connection error with the Rocket League API. " \
-                   "Please try the command again in 10 seconds."
-    TIMEOUT_ERROR = ":hourglass:  The request to the Rocket League API timed out. " \
+                   "Please make sure the right account is used. `(Status: 400)`"
+    PSY_TOKEN_INVALID = ":x: Error: The Psyonix API token is invalid. `(Status: 401)`"
+    SERVER_ERROR = ":satellite: The Rocket League API is experiencing issues. " \
+                   "Please try the command again in 30 seconds. `(Status: {})`"
+    # Other request-based errors.
+    TIMEOUT_ERROR = ":hourglass: The request to the Rocket League API timed out. " \
                     "This means that the API might be down. Try again later."
     UNKNOWN_STATUS_ERROR = "Something went wrong whilst querying the Psyonix API.\nStatus: {}\n Query: {}"
 
@@ -47,9 +48,6 @@ class PsyonixCalls:
                             resp_json = await resp.json()
                         else:
                             resp_json = None
-            except aiohttp.client_exceptions.ClientConnectionError:
-                to_return = False
-                error = self.CLIENT_ERROR
             except aiohttp.client_exceptions.ServerTimeoutError:
                 to_return = False
                 error = self.TIMEOUT_ERROR
@@ -65,7 +63,9 @@ class PsyonixCalls:
                         error = self.PSY_TOKEN_INVALID
                     elif resp_status == 400:
                         error = self.PLAYER_ERROR
-                    else:
+                    elif resp_status in {500, 502}:
+                        error = self.SERVER_ERROR.format(resp_status)
+                    else:  # TODO: return the unknown error as a string, but WITHOUT the request url.
                         raise Exception(self.UNKNOWN_STATUS_ERROR.format(resp_status, request_url))
         return to_return, error
 

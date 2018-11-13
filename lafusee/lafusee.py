@@ -59,18 +59,24 @@ class LaFusee(BaseCog):
     R_CONF_NOT_ENABLED = "Don't forget to enable the RL rank role functionality by doing `{}{}`"
     R_CONF_INCOMPLETE = "You can either add each missing role individually using `{}{}`, " \
                         "or rerun this command when all roles are set up."
-    # Link account constants.
+    # General rank role constants.
+    LINKED_UNRANKED = "Your linked account is (currently) unranked in every playlist."
+    RANK_ROLE_ADDED = "You received the {r_role} role, which is the highest rank of your linked account."
+    RANK_ROLE_REMOVED = "Your rank roles are removed."
+    RANK_ROLE_INTACT = "You already seem to have the right rank role ({r_role}), so your roles are not changed."
+    RANK_ROLE_UPDATED = "Your rank role is successfully updated to {r_role}."
+    RANK_ROLE_NULL = "You did not have any rank roles, so none were deleted either"
+    # Link account / Rank role command constants (incl. error).
+    RANK_ROLE_DISABLED = ERROR + "You cannot obtain a rank role on this server!"
+    RANK_ROLE_UPDATE_UNRANKED = ERROR + LINKED_UNRANKED + "\nThus, your rank roles could not be updated."
     LINK_SUCCESS = DONE + "Successfully linked your {} ID with this account!"
+    LINK_ROLE_UNRANKED = LINKED_UNRANKED + "\nThus, you cannot receive a rank role."
     LINK_REMOVED = BIN + "Successfully unlinked your {} ID from this account."
     LINK_AND_RANKROLE_REMOVED = LINK_REMOVED + "\nIf you had any rank roles, these were removed as well."  # 1 {}
     LINK_REMOVE_PROMPT = "**Are you sure you want to unlink your account?**\n" \
                          "Keep in mind that you __don't__ have to unlink your account to update it.\n" \
                          "If you are sure, resend this command, but with `yes` at the end, to unlink your {} ID. " \
                          "No action needed otherwise. {}"
-    LINK_ROLE_INTACT = "You already seem to have the right rank role, so nothing changed there."
-    LINK_ROLE_ADDED = "You also received a rank role of the highest rank of the account you just linked!"
-    LINK_ROLE_UNRANKED = "Unfortunately, you do not seem to have any rank, meaning that you cannot receive a rank role."
-    LINK_ROLES_UPDATED = "Your rank roles are updated with the highest rank of the account you just linked!"
     # General user link errors.
     USER_NOT_REGISTERED = ERROR + "This user has not registered their account!"
     AUTHOR_NOT_REGISTERED = ERROR + "You do not have a registered account."
@@ -79,12 +85,12 @@ class LaFusee(BaseCog):
     PSY_TOKEN_LEN = 40
     STEAM_TOKEN_LEN = 32
     # Minimal embed constants.
-    MINIMAL_ONLY_MMR = "`{:⠀<8}`  **{:0.2f}**"  # Padding character is a Braille space.
-    MINIMAL_RANKED = "`{ls:⠀<8}`  **{n:0.2f}**  ({bold}{tier_div}{bold})"
-    MINIMAL_NO_MATCHES = "`{:⠀<8}`  *No matches played*"
+    MINIMAL_ONLY_MMR = "`{:\u2800<8}`  **{:0.2f}**"  # Padding character (\u2800) is a Braille space.
+    MINIMAL_RANKED = "`{ls:\u2800<8}`  **{n:0.2f}**  ({bold}{tier_div}{bold})"
+    MINIMAL_NO_MATCHES = "`{:\u2800<8}`  *No matches played*"
     # Other constants.
     STEAM_PROFILE_URL = "https://steamcommunity.com/profiles/{}"
-    ID64_NON_NUMERIC = ERROR + "`/profiles/` links must have a fully numeric id!"
+    ID64_NON_NUMERIC = ERROR + "`/profiles/` links must have a fully numeric ID!"
 
     def __init__(self, bot):
         self.bot = bot
@@ -257,55 +263,62 @@ class LaFusee(BaseCog):
     @commands.command(name="rl_link")
     async def register_tag(self, ctx, platform, profile_id):
         """Register (or update) your gamer account for use in other commands"""
+        # TODO: Make it mandatory to remove a link before they can register a new one, to encourage rl_rankrole usage.
         gld = ctx.guild
-        url_platform, url_id, notice = await self.platform_id_bundle(platform, profile_id)
-        if not notice:  # Platform and ID valid!
-            author = ctx.author
-            username = "{}#{}".format(author.name, author.discriminator)
-            await self.link_db.insert_user(author.id, username, url_platform, url_id)
-            cap_platform = url_platform.capitalize()
-            link_say = self.LINK_SUCCESS.format(cap_platform)
+        msg = await ctx.send("Linking your account...")
+        url_platform, url_id, bundle_error = await self.platform_id_bundle(platform, profile_id)
+        if bundle_error:
+            to_say = bundle_error
+        else:  # Platform and ID valid!
+            # Check their rankings to see if their platform + ID pair gives an error.
+            response, api_error = await self.psy_api.player_skills(url_platform, url_id)
+            if api_error:
+                to_say = api_error
+            else:
+                author = ctx.author
+                username = "{}#{}".format(author.name, author.discriminator)
+                await self.link_db.insert_user(author.id, username, url_platform, url_id)
+                cap_platform = url_platform.capitalize()
+                link_say = self.LINK_SUCCESS.format(cap_platform)
 
-            rankrole_enabled = await self.config.guild(gld).rankrole_enabled()
-            if rankrole_enabled is False:
-                to_say = link_say
-            else:  # Rank roles are enabled.
-                # Check their highest roles, and give a role if this is not unranked.
-                response, error = await self.psy_api.player_skills(url_platform, url_id)
-                player_skills = response.get("player_skills")
-                best_tier, best_list_id, played_lists = self.best_playlist(player_skills)
-                if best_tier == 0:  # Unranked, so no actual highest rank.
-                    role_say = self.LINK_ROLE_UNRANKED
-                else:  # Does have a rank.
-                    rankrole_dict = await self.config.guild(gld).rankrole_dict()
-                    highest_id = rankrole_dict.get(str(best_tier), None)
-                    if highest_id is None:
-                        # Rank roles are not configured / stored properly...
-                        role_say = "The role you are supposed to get does not exist... Contact a staff member."
-                        pass
-                    else:
-                        # TODO: Test various cases with missing rank roles.
-                        role_to_add = discord.utils.get(gld.roles, id=highest_id)
-                        # Check if any (old) rank roles should be removed first.
-                        roles = author.roles
-                        rankrole_ids = {r_id for r_id in rankrole_dict.values() if r_id is not None}
-                        author_rankroles = [r for r in roles if r.id in rankrole_ids]
-                        if author_rankroles == [role_to_add]:
-                            # Author already has the exact rank role he should have, and no other rank roles.
-                            role_say = self.LINK_ROLE_INTACT
-                        elif len(author_rankroles) > 0:
-                            # Remove all rank roles, except the role that is supposed to be added.
-                            to_remove = [r for r in author_rankroles if r.id != highest_id]
-                            await author.remove_roles(*to_remove)
-                            if highest_id not in author_rankroles:
-                                await author.add_roles(role_to_add)
-                            role_say = self.LINK_ROLES_UPDATED
-                        else:  # No current rank roles.
-                            await author.add_roles(role_to_add)
-                            role_say = self.LINK_ROLE_ADDED
-                to_say = "\n".join((link_say, role_say))
+                rankrole_enabled = await self.config.guild(gld).rankrole_enabled()
+                if rankrole_enabled is False:
+                    to_say = link_say
+                else:  # Rank roles are enabled.
+                    # Check their highest roles, and give a role if this is not unranked.
+                    player_skills = response.get("player_skills")
+                    best_tier, best_list_id, played_lists = self.best_playlist(player_skills)
+                    if best_tier == 0:  # Unranked, so no actual highest rank.
+                        role_say = self.LINK_ROLE_UNRANKED  # Keep roles in the event one's ranks got inactive.
+                    else:  # Does have a rank.
+                        role_say = await self.update_member_rankroles(ctx.guild, author, best_tier)
+                    to_say = "\n".join((link_say, role_say))
+        await msg.edit(content=to_say)
+
+    @commands.command(name="rl_rankrole")
+    async def update_rank_role(self, ctx):
+        """Update your rank role based on the current best ranked of your linked account"""
+        gld = ctx.guild
+        rankrole_enabled = await self.config.guild(gld).rankrole_enabled()
+        if rankrole_enabled is False:
+            to_say = self.RANK_ROLE_DISABLED
         else:
-            to_say = notice
+            author = ctx.author
+            url_platform, url_id = await self.link_db.select_user(author.id)
+            if url_platform is None and url_id is None:
+                to_say = self.AUTHOR_NOT_REGISTERED
+            else:
+                response, notice = await self.psy_api.player_skills(url_platform, url_id)
+                if notice:
+                    to_say = notice
+                else:
+                    player_skills = response.get("player_skills")
+                    best_tier, best_list_id, played_lists = self.best_playlist(player_skills)
+                    if best_tier == 0:  # Unranked, so no actual highest rank.
+                        to_say = self.RANK_ROLE_UPDATE_UNRANKED  # Keep roles in the event one's ranks got inactive.
+                    else:  # Does have a rank.
+                        role_say = await self.update_member_rankroles(ctx.guild, author, best_tier)
+                        to_say = "{}{}".format(self.DONE, role_say)
         await ctx.send(to_say)
 
     @commands.command(name="rl_unlink")
@@ -329,12 +342,7 @@ class LaFusee(BaseCog):
                     to_say = self.LINK_REMOVED.format(cap_platform)
                 else:
                     # Remove any leftover rank roles.
-                    roles = author.roles
-                    rankrole_dict = await self.config.guild(gld).rankrole_dict()
-                    rankrole_ids = {r_id for r_id in rankrole_dict.values() if r_id is not None}
-                    to_remove = [r for r in roles if r.id in rankrole_ids]
-                    if len(to_remove) > 0:
-                        await author.remove_roles(*to_remove)
+                    await self.update_member_rankroles(gld, author)
                     to_say = self.LINK_AND_RANKROLE_REMOVED.format(cap_platform)
         await ctx.send(to_say)
 
@@ -347,7 +355,7 @@ class LaFusee(BaseCog):
             response, notice = await self.psy_api.player_skills(url_platform, url_id)
             if not notice:
                 embeds = self.make_lfg_embed(response, url_platform)
-                await red_menu.menu(ctx, embeds, red_menu.DEFAULT_CONTROLS, timeout=60.0)
+                await red_menu.menu(ctx, embeds, red_menu.DEFAULT_CONTROLS, timeout=30.0)
         if notice:
             await ctx.send(notice)
 
@@ -369,7 +377,7 @@ class LaFusee(BaseCog):
             response, notice = await self.psy_api.player_skills(url_platform, url_id)
             if not notice:
                 embeds = self.make_lfg_embed(response, url_platform, user)
-                await red_menu.menu(ctx, embeds, red_menu.DEFAULT_CONTROLS, timeout=60.0)
+                await red_menu.menu(ctx, embeds, red_menu.DEFAULT_CONTROLS, timeout=30.0)
         if notice:
             await ctx.send(notice)
 
@@ -470,6 +478,51 @@ class LaFusee(BaseCog):
         await ctx.send(embed=embed)
 
     # Utilities
+
+    async def update_member_rankroles(self, gld: discord.Guild, mem: discord.Member, tier_to_add: int = None) -> str:
+        """Update the rank roles of a user
+
+        tier_to_add must be either an int between 0-19 inclusive, or None.
+        If tier_to_add is None, all rank roles will be removed.
+        Otherwise, the tier_to_add will be kept, or added in case the member did not have it."""
+        assert (tier_to_add is None or (type(tier_to_add) == int and 0 <= tier_to_add <= 19),
+                f"Invalid int for tier: {tier_to_add} is not an integer between 0 and 19 inclusive.")
+        rankrole_dict = await self.config.guild(gld).rankrole_dict()
+        rankrole_ids = {r_id for r_id in rankrole_dict.values() if r_id is not None}
+
+        roles = mem.roles
+        member_r_roles = [r for r in roles if r.id in rankrole_ids]
+
+        if tier_to_add is None or tier_to_add == 0:  # All member rank roles should be deleted.
+            if len(member_r_roles) > 0:
+                await mem.remove_roles(*member_r_roles)
+                to_return = self.RANK_ROLE_REMOVED
+            else:
+                to_return = self.RANK_ROLE_NULL
+        else:
+            exempt_role_id = rankrole_dict.get(str(tier_to_add), None)
+            assert exempt_role_id is not None, f"LaFusee: The role for tier {tier_to_add} is not configured"
+            role_to_add = discord.utils.get(gld.roles, id=exempt_role_id)
+            assert role_to_add is not None, f"LaFusee: The role with ID {exempt_role_id} ({tier_to_add}) does not exist"
+
+            tier_name = self.get_tier_name(tier_to_add)
+            if len(member_r_roles) == 0:  # No current rank roles.
+                await mem.add_roles(role_to_add)
+                to_return = self.RANK_ROLE_ADDED.format(r_role=tier_name)  # ADD_SOME
+            elif member_r_roles == [role_to_add]:
+                # Author already has the exact rank role he should have, and no other rank roles.
+                to_return = self.RANK_ROLE_INTACT.format(r_role=tier_name)  # ADD_SOME
+            else:
+                if role_to_add in member_r_roles:
+                    # Keep the role supposed to be added, remove the rest later.
+                    to_remove = [r for r in member_r_roles if r != role_to_add]
+                else:
+                    await mem.add_roles(role_to_add)  # Add the role, remove the current ones later.
+                    to_remove = member_r_roles
+                await mem.remove_roles(*to_remove)
+                to_return = self.RANK_ROLE_UPDATED.format(r_role=tier_name)  # ADD_SOME
+        return to_return
+
     async def platform_id_bundle(self, platform_in: str, id_in: str):
         """Verify the input of a platform and gamer id
 

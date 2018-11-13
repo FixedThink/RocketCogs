@@ -5,15 +5,16 @@ from redbot.core import Config
 
 class SteamCalls:
     """Class for querying the Steam API asynchronically"""
-
     # t = token, v = vanity url.
     API_VANITY = "http://api.steampowered.com/ISteamUser/ResolveVanityURL/v1/?key={t}&vanityurl={v}"
-    STEAM_BAD_REQUEST = ":x: Error: The request done to the Steam API was improper.\nRequest: {}"
-    STEAM_NO_MATCH = ":x: Error: That vanity id does not seem to exist. Please check your input."
+    STEAM_NO_MATCH = ":x: Error: That Steam vanity ID does not seem to exist. Please check your input."
     STEAM_TOKEN_NONE = ":x: Error: No token set for the Steam API."
-    STEAM_TOKEN_INVALID = ":x: Error: The Steam API token is invalid."
-
-    CLIENT_ERROR = ":satellite: There was a connection error with the Steam API. Please try the command again."
+    # Constants based on status codes.
+    STEAM_BAD_REQUEST = ":x: Error: The request done to the Steam API was improper." \
+                        "\nSee the console for more info. `(Status: 400)`"
+    STEAM_TOKEN_INVALID = ":x: Error: The Steam API token is invalid. `(Status: 403)`"
+    SERVER_ERROR = ":satellite: The Steam API is experiencing issues. Please try the command again. `(Status: {})`"
+    # Other request-based errors.
     TIMEOUT_ERROR = ":hourglass: The request to the Steam API timed out. This means that the API might be down. " \
                     "Try to use the 17-digit number instead of the vanity ID, or try again later."
     UNKNOWN_STATUS_ERROR = "Something went wrong whilst querying the Steam API.\nStatus: {}\n Query: {}"
@@ -37,9 +38,6 @@ class SteamCalls:
                     resp_json = await resp.json()
                 else:
                     resp_json = None
-        except aiohttp.client_exceptions.ClientConnectionError:
-            to_return = False
-            error = self.CLIENT_ERROR
         except aiohttp.client_exceptions.ServerTimeoutError:
             to_return = False
             error = self.TIMEOUT_ERROR
@@ -52,7 +50,10 @@ class SteamCalls:
                 if resp_status == 403:
                     error = self.STEAM_TOKEN_INVALID
                 elif resp_status == 400:
-                    error = self.STEAM_BAD_REQUEST.format(request_url)
+                    error = self.STEAM_BAD_REQUEST
+                    print("Invalid request URL: {}".format(request_url))
+                elif resp_status in {500, 502}:
+                    error = self.SERVER_ERROR.format(resp_status)
                 else:
                     raise Exception(self.UNKNOWN_STATUS_ERROR.format(resp_status, request_url))
         return to_return, error
