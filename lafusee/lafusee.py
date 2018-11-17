@@ -18,10 +18,13 @@ BaseCog = getattr(commands, "Cog", object)
 
 class LaFusee(BaseCog):
     """Rocket League rank commands."""
-    # TODO: move some (static) methods and their constants to a separate file.
+    # TODO: Move some (static) methods and their constants to a separate file.
+    # TODO: Add base command category (`[p]rl`), and add both platform/tag and stat value explanations to it.
     # Constants.
+    PSY_TOKEN_LEN = 40
+    STEAM_TOKEN_LEN = 32
     EMBED_DIVMOD_COLOURS = {0: 0xca8700, 1: 0xdadada, 2: 0x909090, 3: 0xddbb20, 4: 0x10bbee,
-                            5: 0x10abcd, 6: 0xaa60dd, 7: 0x602090}
+                            5: 0x10abcd, 6: 0xaa60dd, 7: 0xbb00bb}
     TIER_DIVMOD_NAMES = {0: "Unranked", 1: "Bronze", 2: "Silver", 3: "Gold", 4: "Platinum",
                          5: "Diamond", 6: "Champion", 7: "Grand Champion"}
     ROMAN_NUMS = {1: "I", 2: "II", 3: "III", 4: "IV"}
@@ -52,21 +55,26 @@ class LaFusee(BaseCog):
     TOKEN_HEX_ERROR = ERROR + "Your input does not seem to be hexadecimal."
     TOKEN_NOT_PRIVATE = ":warning: Because of safety reasons, please send the bot this command in DMs. Input ignored."
     TOKEN_INVALID = ERROR + "Token is invalid."
-    # RL rank role constants.
+    # Rank role configuration constants.
     R_CONF_DISABLED = BIN + "Successfully disabled the RL rank role functionality for this server."
     R_CONF_ENABLED = DONE + "Successfully enabled the RL rank role functionality for this server."
     R_CONF_SUCCESS = DONE + "Successfully added all roles!"
     R_CONF_NOT_ENABLED = "Don't forget to enable the RL rank role functionality by doing `{}{}`"
+    R_CONF_INVALID_MODE = ERROR + "Invalid mode."
     R_CONF_INCOMPLETE = "You can either add each missing role individually using `{}{}`, " \
                         "or rerun this command when all roles are set up."
-    # General rank role constants.
+    R_GENERATE_NO_PERMS = ERROR + "I do not have sufficient permissions to add roles"
+    R_GENERATE_PROGRESS = "{n} out of 19 roles done."
+    R_DETECT_SUCCESS = DONE + "Detected `{role_id}` for {tier_str}"
+    R_DETECT_FAIL = ":x: Did not find a role for {tier_str}"
+    R_DETECT_TOTAL = "**Total matches:** {match_count} out of 19\n{note}\n\n{rest}"
+    # Account registration + rank role update constants.
     LINKED_UNRANKED = "Your linked account is (currently) unranked in every playlist."
     RANK_ROLE_ADDED = "You received the {r_role} role, which is the highest rank of your linked account."
     RANK_ROLE_REMOVED = "Your rank roles are removed."
     RANK_ROLE_INTACT = "You already seem to have the right rank role ({r_role}), so your roles are not changed."
     RANK_ROLE_UPDATED = "Your rank role is successfully updated to {r_role}."
     RANK_ROLE_NULL = "You did not have any rank roles, so none were deleted either"
-    # Link account / Rank role command constants (incl. error).
     RANK_ROLE_DISABLED = ERROR + "You cannot obtain a rank role on this server!"
     RANK_ROLE_UPDATE_UNRANKED = ERROR + LINKED_UNRANKED + "\nThus, your rank roles could not be updated."
     LINK_SUCCESS = DONE + "Successfully linked your {} ID with this account!"
@@ -81,16 +89,21 @@ class LaFusee(BaseCog):
     USER_NOT_REGISTERED = ERROR + "This user has not registered their account!"
     AUTHOR_NOT_REGISTERED = ERROR + "You do not have a registered account."
     AUTHOR_REGISTER_PROMPT = AUTHOR_NOT_REGISTERED + "\nUse `{}{}` to register one."
-    # Other API constants.
-    PSY_TOKEN_LEN = 40
-    STEAM_TOKEN_LEN = 32
-    # Minimal embed constants.
-    MINIMAL_ONLY_MMR = "`{:\u2800<8}`  **{:0.2f}**"  # Padding character (\u2800) is a Braille space.
+    # Platform-tag validation constants.
+    ID64_NON_NUMERIC = ERROR + "`/profiles/` links must have a fully numeric ID!"
+    SWITCH_UNSUPPORTED = ERROR + "Psyonix does not (yet) support rank queries for the Nintendo Switch.\n" \
+                                 "When they do, this command will support it as soon as possible."
+    PLATFORM_INVALID = ERROR + "That platform does not exist."
+    # Assertion error constants.
+    ASSERT_INT = "LaFusee: Invalid int for tier: {n} is not an integer between 0 and 19 inclusive."
+    ASSERT_ROLE_CONFIG = "LaFusee: The role for tier {n} is not configured."
+    ASSERT_ROLE_EXISTS = "LaFusee: The role with ID {r_id} ({tier_n}) does not exist."
+    # Minimal embed constants. Padding character (\u2800) is a Braille space.
+    MINIMAL_ONLY_MMR = "`{:\u2800<8}`  **{:0.2f}**"
     MINIMAL_RANKED = "`{ls:\u2800<8}`  **{n:0.2f}**  ({bold}{tier_div}{bold})"
     MINIMAL_NO_MATCHES = "`{:\u2800<8}`  *No matches played*"
     # Other constants.
     STEAM_PROFILE_URL = "https://steamcommunity.com/profiles/{}"
-    ID64_NON_NUMERIC = ERROR + "`/profiles/` links must have a fully numeric ID!"
 
     def __init__(self, bot):
         self.bot = bot
@@ -220,7 +233,7 @@ class LaFusee(BaseCog):
         if low_mode == "generate":
             role_dict = {}
             if gld.me.guild_permissions.manage_roles is False:
-                to_say = ":x: Error: I do not have sufficient permissions to add roles."
+                to_say = self.R_GENERATE_NO_PERMS
             else:
                 for i in reversed(range(1, 20)):  # Reversed because of hierarchy.
                     role_colour = discord.Colour(self.get_tier_colour(i))
@@ -229,7 +242,7 @@ class LaFusee(BaseCog):
                     role_dict[i] = new_role.id
                     progress_n = 20 - i
                     if progress_n % 5 == 0:
-                        await ctx.send(f"{progress_n} out of 19 roles done.")
+                        await ctx.send(self.R_GENERATE_PROGRESS.format(n=progress_n))
                 to_say = self.R_CONF_SUCCESS
             await self.config.guild(gld).rankrole_dict.set(role_dict)
         elif low_mode == "detect":
@@ -243,20 +256,20 @@ class LaFusee(BaseCog):
                     matches += 1
                     role_id = role.id
                     role_dict[i] = role_id
-                    say_list.append(f":white_check_mark: Detected `{role_id}` for {tier_str}")
-                else:
+                    say_list.append(self.R_DETECT_SUCCESS.format(role_id=role_id, tier_str=tier_str))
+                else:  # No role found.
                     role_dict[i] = None
-                    say_list.append(f":x: Did not find a role for {tier_str}")
+                    say_list.append(self.R_DETECT_FAIL.format(tier_str=tier_str))
             if matches < 19:
                 comment = self.R_CONF_INCOMPLETE  # TODO: add manual command.
             elif await self.config.guild(gld).rankrole_enabled() is False:
                 comment = self.R_CONF_NOT_ENABLED.format(ctx.prefix, self.toggle_rl_role.qualified_name)
             else:
                 comment = self.R_CONF_SUCCESS
-            to_say = "**Total matches:** {} out of 19\n{}\n\n{}".format(matches, comment, "\n".join(say_list))
+            to_say = self.R_DETECT_TOTAL.format(match_count=matches, note=comment, rest="\n".join(say_list))
             await self.config.guild(gld).rankrole_dict.set(role_dict)
         else:
-            to_say = ":x: Error: Invalid mode."
+            to_say = self.R_CONF_INVALID_MODE
         await ctx.send(to_say)
 
     # Registration commands.
@@ -465,53 +478,43 @@ class LaFusee(BaseCog):
     async def test_embed_colour(self, ctx, hex_code):
         """Test embed colours"""
         embed = discord.Embed(title="Tell me, black or white?", colour=int(hex_code, 16))
-        embed.description = "Hi\nHELLLLOOOOOOO\nOk."
+        embed.description = "This is just a description\nthat is split in two lines for some reason."
         embed.set_footer(text="Hex code: {}".format(hex_code))
         await ctx.send(embed=embed)
 
-    @_tests.command(name="block")
-    @checks.mod_or_permissions(administrator=True)
-    async def test_embed_soft_code_block(self, ctx, text):
-        """Test embed colours"""
-        embed = discord.Embed(title="Test embed")
-        embed.description = "`{}`".format(text)
-        await ctx.send(embed=embed)
-
     # Utilities
-
-    async def update_member_rankroles(self, gld: discord.Guild, mem: discord.Member, tier_to_add: int = None) -> str:
+    async def update_member_rankroles(self, gld: discord.Guild, mem: discord.Member, add_tier: int = None) -> str:
         """Update the rank roles of a user
 
-        tier_to_add must be either an int between 0-19 inclusive, or None.
-        If tier_to_add is None, all rank roles will be removed.
-        Otherwise, the tier_to_add will be kept, or added in case the member did not have it."""
-        assert (tier_to_add is None or (type(tier_to_add) == int and 0 <= tier_to_add <= 19),
-                f"Invalid int for tier: {tier_to_add} is not an integer between 0 and 19 inclusive.")
+        add_tier must be either an int between 0-19 inclusive, or None.
+        If add_tier is None, all rank roles will be removed.
+        Otherwise, the add_tier will be kept, or added in case the member did not have it."""
+        assert add_tier is None or (type(add_tier) == int and 0 <= add_tier <= 19), self.ASSERT_INT.format(n=add_tier)
         rankrole_dict = await self.config.guild(gld).rankrole_dict()
         rankrole_ids = {r_id for r_id in rankrole_dict.values() if r_id is not None}
 
         roles = mem.roles
         member_r_roles = [r for r in roles if r.id in rankrole_ids]
 
-        if tier_to_add is None or tier_to_add == 0:  # All member rank roles should be deleted.
+        if add_tier is None or add_tier == 0:  # All member rank roles should be deleted.
             if len(member_r_roles) > 0:
                 await mem.remove_roles(*member_r_roles)
                 to_return = self.RANK_ROLE_REMOVED
             else:
                 to_return = self.RANK_ROLE_NULL
         else:
-            exempt_role_id = rankrole_dict.get(str(tier_to_add), None)
-            assert exempt_role_id is not None, f"LaFusee: The role for tier {tier_to_add} is not configured"
+            exempt_role_id = rankrole_dict.get(str(add_tier), None)
+            assert exempt_role_id is not None, self.ASSERT_ROLE_CONFIG.format(n=add_tier)
             role_to_add = discord.utils.get(gld.roles, id=exempt_role_id)
-            assert role_to_add is not None, f"LaFusee: The role with ID {exempt_role_id} ({tier_to_add}) does not exist"
+            assert role_to_add is not None, self.ASSERT_ROLE_EXISTS.format(r_id=exempt_role_id, tier_n=add_tier)
 
-            tier_name = self.get_tier_name(tier_to_add)
+            tier_name = self.get_tier_name(add_tier)
             if len(member_r_roles) == 0:  # No current rank roles.
                 await mem.add_roles(role_to_add)
-                to_return = self.RANK_ROLE_ADDED.format(r_role=tier_name)  # ADD_SOME
+                to_return = self.RANK_ROLE_ADDED.format(r_role=tier_name)
             elif member_r_roles == [role_to_add]:
                 # Author already has the exact rank role he should have, and no other rank roles.
-                to_return = self.RANK_ROLE_INTACT.format(r_role=tier_name)  # ADD_SOME
+                to_return = self.RANK_ROLE_INTACT.format(r_role=tier_name)
             else:
                 if role_to_add in member_r_roles:
                     # Keep the role supposed to be added, remove the rest later.
@@ -520,26 +523,26 @@ class LaFusee(BaseCog):
                     await mem.add_roles(role_to_add)  # Add the role, remove the current ones later.
                     to_remove = member_r_roles
                 await mem.remove_roles(*to_remove)
-                to_return = self.RANK_ROLE_UPDATED.format(r_role=tier_name)  # ADD_SOME
+                to_return = self.RANK_ROLE_UPDATED.format(r_role=tier_name)
         return to_return
 
     async def platform_id_bundle(self, platform_in: str, id_in: str):
         """Verify the input of a platform and gamer id
 
-        By default, number input for id_in (for Steam) will be treated as an id3/id64.
-        In order to use vanity id that consists solely of digit, it must be prefixed with /id/"""
+        By default, number input for id_in (for Steam) will be treated as an ID3/ID64.
+        In order to use vanity id that consists solely of digits, it must be prefixed with /id/"""
         notice = None
         platform_out = self.get_url_platform(platform_in)
         if not platform_out:
-            notice = ":x: Error: that platform does not exist."
+            notice = self.PLATFORM_INVALID
         elif platform_out == "switch":
             platform_out = False
-            notice = ":x: Error: Psyonix does not (yet) support rank queries for the Nintendo Switch. " \
-                     "When they do, we will make sure to add support for it."
+            notice = self.SWITCH_UNSUPPORTED
         if notice:
             id_out = False
         else:  # Valid platform.
             if platform_out == "steam":
+                # TODO: convert [U:1:{n}] to just {n}, to support ID3 in their original format.
                 if id_in.lstrip("-").isdigit():
                     id_out = self.int_to_steam_id64(int(id_in))
                 else:
@@ -639,7 +642,6 @@ class LaFusee(BaseCog):
         unplayed_lists = {n for n in self.PLAYLIST_IDS if n not in played_lists}
         # Create rows for each playlist.
         summary_tuple = self.rank_summary_str(player_skills, best_list_id, unplayed_lists)
-
         # Set author and description. Profile links only exist for Steam.
         player_url = self.STEAM_PROFILE_URL.format(response["user_id"]) \
             if url_platform == "steam" else discord.Embed.Empty
