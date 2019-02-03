@@ -7,9 +7,9 @@ import aiosqlite
 
 
 class DbQueries:
-    """Query the account registrations asynchronically"""
-    CREATE_TABLE = "CREATE TABLE `registrations` (`userID` INTEGER UNIQUE, `username` TEXT, `timestamp` TEXT," \
-                   "`platform` INTEGER, `gamer_id` TEXT);"
+    """Query the account registrations"""
+    CREATE_TABLE = "CREATE TABLE `registrations` (`userID` INTEGER, `username` TEXT, `timestamp` TEXT, " \
+                   "`platform` INTEGER, `gamer_id` TEXT, PRIMARY KEY(`userID`));"
     TABLE_CHECK = "SELECT count(*) FROM sqlite_master WHERE type='table' AND name='registrations';"
     DELETE_LINK = "DELETE FROM `registrations` WHERE userID = ?"
     INSERT_LINK = "INSERT OR REPLACE INTO `registrations` VALUES (?, ?, ?, ?, ?);"

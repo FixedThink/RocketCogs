@@ -1,0 +1,10 @@
+{
+  "author": ["#s#8059", "HRAND5#0101"],
+  "description": "This cog allows members to give other members reputation. This reputation will then be stored in a database. Based on the database, further things can be done. For example, a leaderboard for the people with the most reps can be shown, people can look up their own reputation, and people that have a sufficient amount of reputation and have recently received reputation could also obtain a role (configurable).",
+  "install_msg": "Thank you for installing our cog!",
+  "short": "Give people reputation and reward reputable members",
+  "name": "Reputation",
+  "disabled": false,
+  "requirements": ["aiosqlite"],
+  "tags": ["reputation"]
+}

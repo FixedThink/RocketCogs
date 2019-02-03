@@ -294,8 +294,7 @@ class LaFusee(commands.Cog):
                 if api_error:
                     edit_say = api_error
                 else:
-                    username = "{}#{}".format(author.name, author.discriminator)
-                    await self.link_db.insert_user(author.id, username, url_platform, url_id)
+                    await self.link_db.insert_user(author.id, str(author), url_platform, url_id)
                     cap_platform = url_platform.capitalize()
                     link_say = self.LINK_SUCCESS.format(cap_platform)
                     if rankrole_enabled is False:
