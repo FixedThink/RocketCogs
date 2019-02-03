@@ -25,7 +25,7 @@ class SteamCalls:
         self.config.register_global(psy_token=None, steam_token=None)
         self.session = aiohttp.ClientSession()
 
-    async def call_steam_api(self, request_url):
+    async def call_steam_api(self, request_url: str) -> tuple:
         """Given an url, call the API using the configured token
 
         Returns a list if valid, False if invalid, and None if there is no token.
@@ -58,7 +58,7 @@ class SteamCalls:
                     raise Exception(self.UNKNOWN_STATUS_ERROR.format(resp_status, request_url))
         return to_return, error
 
-    async def vanity_to_id64(self, vanity_id):
+    async def vanity_to_id64(self, vanity_id: str) -> tuple:
         """Convert a Steam vanity id into an id64, so that it can be used in the Psyonix API
 
         Structure of a normal API response if there's a match:

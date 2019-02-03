@@ -1,10 +1,10 @@
 {
-    "AUTHOR" : "#s#8059",
-    "INSTALL_MSG" : "Thanks for installing my cog! Keep in mind that in order to use this cog, you must have a valid Psyonix API token, and a valid Steam API token.",
-    "NAME" : "LaFusee",
-    "DISABLED" : false,
-    "SHORT" : "Check your Rocket League stats!",
-    "DESCRIPTION" : "See your competitive ranks for all playlists, see your exact skill rating, mu, sigma, online goal count, and more!",
-    "REQUIREMENTS" : ["aiosqlite"],
-    "TAGS": ["RL", "Rocket League", "Steam", "Xbox", "PS4", "Gaming"]
+  "author": ["#s#8059"],
+  "description": "See your competitive ranks for all playlists, see your exact skill rating, mu, sigma, online goal count, and more!",
+  "install_msg": "Thanks for installing my cog! Keep in mind that in order to use this cog, you must have a valid Psyonix API token, and a valid Steam API token.",
+  "short": "Check your Rocket League stats!",
+  "name": "LaFusee",
+  "disabled": false,
+  "requirements" : ["aiosqlite"],
+  "tags": ["RL", "Rocket League", "Steam", "Xbox", "PS4", "Gaming"]
 }
