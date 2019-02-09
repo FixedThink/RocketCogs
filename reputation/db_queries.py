@@ -1,7 +1,7 @@
 # Default library.
 import datetime as dt
 import sqlite3  # Only to make the db on init.
-from typing import Optional
+from typing import Optional, Tuple
 
 # Requirements.
 import aiosqlite
@@ -13,9 +13,10 @@ class DbQueries:
                    "`to_name` TEXT, `stamp` TEXT, `message` TEXT);"
     CREATE_INDEX = "CREATE INDEX get_users_reps ON reputations(to_user);"
     TABLE_CHECK = "SELECT count(*) FROM sqlite_master WHERE type='table' AND name='reputations';"
-    INSERT_REP = "INSERT OR REPLACE INTO `reputations` VALUES (?, ?, ?, ?, ?, ?);"
+    INSERT_REP = "INSERT OR REPLACE INTO `reputations` VALUES (:f_id, :f_n, :t_id, :t_n, :stamp, :msg);"
     SELECT_REP_PAIR = "SELECT * from reputations WHERE from_user = ? AND to_user = ? AND stamp > ?"
-    SELECT_REP_COUNT = "SELECT COUNT(*) as repCount FROM reputations WHERE to_user = ?;"
+    SELECT_REP_COUNT = "SELECT COUNT(*) as rep_count, COUNT(DISTINCT from_user) as u_count, " \
+                       "MAX(stamp) as most_recent FROM reputations WHERE to_user = ?;"
     SELECT_LEADERBOARD = "SELECT to_user, COUNT(to_user) as rep_count FROM reputations " \
                          "GROUP BY to_user ORDER BY rep_count desc;"
 
@@ -40,18 +41,19 @@ class DbQueries:
         connection.close()
         return
 
-    async def insert_rep(self, from_id, from_name, to_id, to_name, rep_msg, cooldown: int = None) -> bool:
+    async def insert_rep(self, from_id: int, from_name: str, to_id: int, to_name: str,
+                         rep_msg: str = None, cooldown: int = None) -> bool:
         """
         :param from_id: UserID of the user that gives the rep.
         :param from_name: username#1234 of the user that gives the rep.
         :param to_id: UserID of the user that is being rep'd.
         :param to_name: username#1234 of the user that is being rep'd.
-        :param rep_msg: The message accompanied with the rep.
+        :param rep_msg: (Optional) The message accompanied with the rep.
         :param cooldown: (Optional) The amount of seconds that need to have passed since the last time
                from_id rep'd to_id.
         :return:
         """
-        if cooldown:  # TODO: Test!
+        if cooldown:
             compare_stamp = dt.datetime.utcnow() - dt.timedelta(seconds=cooldown)
             check_rows = await self.exec_sql(self.SELECT_REP_PAIR, [from_id, to_id, compare_stamp])
             can_insert = not check_rows  # Boolean, if check_rows is empty then the rep can be inserted.
@@ -59,16 +61,18 @@ class DbQueries:
             can_insert = True
         if can_insert:
             stamp = str(dt.datetime.utcnow())
-            await self.exec_sql(self.INSERT_REP, [from_id, from_name, to_id, to_name, stamp, rep_msg], commit=True)
+            params = {"f_id": from_id, "f_n": from_name, "t_id": to_id, "t_n": to_name, "stamp": stamp, "msg": rep_msg}
+            await self.exec_sql(self.INSERT_REP, params=params, commit=True)
         return can_insert
 
-    async def user_rep_count(self, user_id: int) -> Optional[int]:
+    async def user_rep_count(self, user_id: int) -> Optional[Tuple[int, int, str]]:
         """
         :param user_id: The userID of the user whose reputation count should be checked.
-        :return: The amount of reputations received by the user.
+        :return: The tuple with the amount of reputations received, given by distinct count of users,
+                 and the datetime string of the last reputation given.
         """
         resp = await self.exec_sql(self.SELECT_REP_COUNT, params=[user_id])
-        return resp[0][0] if resp else None
+        return resp[0] if resp else None
 
     # Utilities.
     async def exec_sql(self, query, params=None, commit=False) -> tuple:
