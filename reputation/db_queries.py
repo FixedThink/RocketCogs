@@ -11,6 +11,7 @@ class DbQueries:
     """Query the reputation database"""
     CREATE_TABLE = "CREATE TABLE `reputations` (`from_user` INTEGER, `from_name` TEXT, `to_user` INTEGER, " \
                    "`to_name` TEXT, `stamp` TEXT, `message` TEXT);"
+    CREATE_INDEX = "CREATE INDEX get_users_reps ON reputations(to_user);"
     TABLE_CHECK = "SELECT count(*) FROM sqlite_master WHERE type='table' AND name='reputations';"
     INSERT_REP = "INSERT OR REPLACE INTO `reputations` VALUES (?, ?, ?, ?, ?, ?);"
     SELECT_REP_PAIR = "SELECT * from reputations WHERE from_user = ? AND to_user = ? AND stamp > ?"
@@ -34,6 +35,7 @@ class DbQueries:
         if is_table is False:
             print("Making the reputations table...")
             cursor.execute(self.CREATE_TABLE)
+            cursor.execute(self.CREATE_INDEX)  # To ensure quick rep lookup.
             connection.commit()
         connection.close()
         return
