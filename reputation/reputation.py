@@ -29,10 +29,10 @@ class Reputation(commands.Cog):
     COOLDOWN_REMOVED = BIN + "Disabled the reputation cooldown."
     COOLDOWN_SET = DONE + "Set the reputation cooldown to {}."
     REP_NOT_COOL = ERROR + "You have given that user a reputation too recently!"
-    REP_WHY_MISSING = ERROR + "Please include a reason to why this user deserves a rep."
-    REP_WHY_HAS_MENTION = ERROR + "Please do not tag any people in the rep reason!\n" \
-                                  "If you must mention someone, use their name instead."
-    COUNT_DESC = "{} has received **{}** reputations{} from **{}** user{}."
+    REP_COMMENT_HAS_AT = ERROR + "Please do not tag any people in the rep reason!\n" \
+                                 "If you must mention someone, use their name instead."
+    REP_YOURSELF = ERROR + "Loving yourself is great, but giving yourself reputation is a bit extreme."
+    COUNT_DESC = "{} has received **{}** reputation{} from **{}** user{}."
     COUNT_NO_REPS = "{} has not received any reputations."
     
     def __init__(self, bot: Red):
@@ -43,8 +43,10 @@ class Reputation(commands.Cog):
         self.config = Config.get_conf(self, identifier=5006, force_registration=True)
         # TODO: Make decay period configurable with a command (like cooldown).
         # TODO: Make active/decayed roles configurable with command.
+        # TODO: Make role/decay threshold configurable with a command, where < 0 resets and == 0 gives error.
         self.config.register_guild(cooldown_period=self.DEFAULT_COOLDOWN, decay_period=self.DEFAULT_DECAY,
-                                   active_role=None, decayed_role=None, reputation_channel=None)
+                                   active_role=None, decayed_role=None, decay_threshold=2,
+                                   role_threshold=10, reputation_channel=None)
         self.rep_db = DbQueries(self.PATH_DB)
 
     # Events
@@ -97,20 +99,25 @@ class Reputation(commands.Cog):
             msg = self.COOLDOWN_SET.format(str(delta))
         await ctx.send(msg)
 
+    @commands.guild_only()
     @commands.command()
-    async def rep(self, ctx, user: discord.Member, *, why: str = None):
-        """Give someone reputation"""
+    async def rep(self, ctx, user: discord.Member, *, comment: str = None):
+        """Give someone reputation
+
+        You may add a comment, but this is not necessary."""
         # TODO: Possibly restrict length of rep message.
         aut = ctx.author
         gld = ctx.guild
         channel = ctx.channel
         cooldown_secs = await self.config.guild(ctx.guild).cooldown_period()
-        if why and "@" in why:
-            notice = self.REP_WHY_HAS_MENTION
+        if user == ctx.author:
+            notice = self.REP_YOURSELF
+        elif comment and "@" in comment:
+            notice = self.REP_COMMENT_HAS_AT
         else:
             rep_channel = await self.config.guild(gld).reputation_channel()
             if rep_channel is None or rep_channel == channel.id:
-                rep_msg = None if not why else why  # Add message as NULL to db if empty string.
+                rep_msg = None if not comment else comment  # Add message as NULL to db if empty string.
                 is_added = await self.rep_db.insert_rep(aut.id, str(aut), user.id, str(user), rep_msg, cooldown_secs)
                 if is_added:
                     notice = None
