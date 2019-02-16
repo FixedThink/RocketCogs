@@ -26,7 +26,6 @@ class DbQueries:
 
     def init_table(self) -> None:
         """Check if the table exists. If not, create it.
-
         Note: this method uses sqlite3 rather than aiosqlite"""
         connection = sqlite3.connect(self.path)
         cursor = connection.cursor()
@@ -73,6 +72,10 @@ class DbQueries:
         """
         resp = await self.exec_sql(self.SELECT_REP_COUNT, params=[user_id])
         return resp[0] if resp else None
+
+    async def rep_leaderboard(self):
+        leaderboard = await self.exec_sql(self.SELECT_LEADERBOARD)
+        return leaderboard if leaderboard else None
 
     # Utilities.
     async def exec_sql(self, query, params=None, commit=False) -> tuple:
