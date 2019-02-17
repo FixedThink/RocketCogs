@@ -14,7 +14,6 @@ from .db_queries import DbQueries
 
 class Reputation(commands.Cog):
     """Give people reputation and reward reputable members"""
-    # TODO: Add leaderboard command, which shows the users with the most reputation. Make a menu if possible.
     __author__ = "#s#8059, HRAND5#0101"
 
     BIN = ":put_litter_in_its_place: "
@@ -36,6 +35,7 @@ class Reputation(commands.Cog):
     COUNT_DESC = "{} has received **{}** reputation{} from **{}** user{}."
     COUNT_NO_REPS = "{} has not received any reputations."
     LEADERBOARD_NO_REPS = ERROR + "No reputations in the database."
+    LEADERBOARD_DESC = "Users that have received at least 1 reputation: **{}**"
     LEADERBOARD_ROW = "`{}` {} - {} reps"
 
     def __init__(self, bot: Red):
@@ -45,11 +45,12 @@ class Reputation(commands.Cog):
         self.PATH_DB = self.FOLDER + "/reputation.db"
         self.config = Config.get_conf(self, identifier=5006, force_registration=True)
         # TODO: Make decay period configurable with a command (like cooldown).
-        # TODO: Make active/decayed roles configurable with command.
+        # TODO: Make active/abstain roles configurable with command.
         # TODO: Make role/decay threshold configurable with a command, where < 0 resets and == 0 gives error.
         self.config.register_guild(cooldown_period=self.DEFAULT_COOLDOWN, decay_period=self.DEFAULT_DECAY,
-                                   active_role=None, decayed_role=None, decay_threshold=2,
+                                   active_role=None, abstain_role=None, decay_threshold=2,
                                    role_threshold=10, reputation_channel=None)
+        self.config.register_user(abstain=False)
         self.rep_db = DbQueries(self.PATH_DB)
 
     # Events
@@ -118,7 +119,8 @@ class Reputation(commands.Cog):
             rep_channel = await self.config.guild(gld).reputation_channel()
             if rep_channel is None or rep_channel == channel.id:
                 rep_msg = None if not comment else comment  # Add message as NULL to db if empty string.
-                is_added = await self.rep_db.insert_rep(aut.id, str(aut), user.id, str(user), rep_msg, cooldown_secs)
+                is_added = await self.rep_db.insert_rep(aut.id, str(aut), user.id, str(user),
+                                                        ctx.message.created_at, rep_msg, cooldown_secs)
                 if is_added:
                     notice = None
                     await ctx.tick()
@@ -146,42 +148,44 @@ class Reputation(commands.Cog):
             embed.description = self.COUNT_NO_REPS.format(user.mention)
         await ctx.send(embed=embed)
 
-    @commands.command(name="leaderboard")
+    @commands.command(name="leaderboard", aliases=["lboard"])
     async def rep_leaderboard(self, ctx):
-        lb_data = await self.rep_db.rep_leaderboard()
+        """See the reputation leaderboard
 
-        if lb_data is None:
+        Ties are broken based on who received a reputation the most recently."""
+        board_list = await self.rep_db.rep_leaderboard()
+        if board_list is None:
             await ctx.send(self.LEADERBOARD_NO_REPS)
         else:  # At least one rep given
-            lb_length = len(lb_data)
-            desc = "Total users that have received at least 1 reputation: **{}**".format(lb_length)
-
-            # Split the leaderboard into fields with under 10 rows
+            repped_count = len(board_list)
+            desc = self.LEADERBOARD_DESC.format(repped_count)
+            # Split the leaderboard into fields with at most 10 rows each.
             field_list = []
-            for i in range((lb_length // 10) + 1):
+            for i in range((repped_count // 10) + 1):
                 start = 10 * i
-                end = start + 10 if lb_length > (start + 10) else lb_length
+                end = start + 10 if repped_count > (start + 10) else repped_count
 
                 field_name = "{}-{}".format(start + 1, end)
-                field_value = "\n".join((self.LEADERBOARD_ROW.format((i + 1), self.mention_from_id(t[0]), t[1])
-                                         for i, t in enumerate(lb_data[start:end], start = start)))
+                field_value = "\n".join((self.LEADERBOARD_ROW.format((i + 1), f"<@{t[0]}>", t[1])
+                                         for i, t in enumerate(board_list[start:end], start=start)))
                 field_list.append((field_name, field_value))
 
-            embed_list = []
             field_count = len(field_list)
-            if field_count == 1:  # If only 1 field, send as 1 embed
+            if field_count == 1:  # If only 1 field, send as 1 embed.
                 f_name = field_list[0][0]
                 f_value = field_list[0][1]
                 embed = discord.Embed(title="Reputation leaderboard", description=desc, colour=discord.Colour.purple())
                 embed.add_field(name=f_name, value=f_value)
-                footer = "Page 1 out of 1."
+                footer = "1 of 1"
                 embed.set_footer(text=footer)
                 await ctx.send(embed=embed)
             else:  # If more than one field, send as a pagified menu.
+                embed_list = []
                 for n, (f_name, f_value) in enumerate(field_list, start=1):
-                    embed = discord.Embed(title="Reputation leaderboard", description=desc, colour=discord.Colour.purple())
+                    embed = discord.Embed(title="Reputation leaderboard", colour=discord.Colour.purple())
+                    embed.description = desc
                     embed.add_field(name=f_name, value=f_value)
-                    footer = "Page {n} out of {total}.".format(n=n, total=field_count)
+                    footer = "{n} of {total}.".format(n=n, total=field_count)
                     embed.set_footer(text=footer)
                     embed_list.append(embed)
                 await red_menu.menu(ctx, embed_list, red_menu.DEFAULT_CONTROLS, timeout=30.0)
@@ -191,7 +195,3 @@ class Reputation(commands.Cog):
     def plural_s(n: int) -> str:
         """Returns an 's' if n is not 1, otherwise returns an empty string"""
         return "" if n == 1 else "s"
-
-    @staticmethod
-    def mention_from_id(user_id: int) -> str:
-        return "<@" + str(user_id) + ">"

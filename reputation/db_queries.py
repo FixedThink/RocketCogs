@@ -1,7 +1,7 @@
 # Default library.
 import datetime as dt
 import sqlite3  # Only to make the db on init.
-from typing import Optional, Tuple
+from typing import List, Optional, Tuple
 
 # Requirements.
 import aiosqlite
@@ -18,7 +18,7 @@ class DbQueries:
     SELECT_REP_COUNT = "SELECT COUNT(*) as rep_count, COUNT(DISTINCT from_user) as u_count, " \
                        "MAX(stamp) as most_recent FROM reputations WHERE to_user = ?;"
     SELECT_LEADERBOARD = "SELECT to_user, COUNT(to_user) as rep_count FROM reputations " \
-                         "GROUP BY to_user ORDER BY rep_count desc;"
+                         "GROUP BY to_user ORDER BY rep_count, MAX(stamp) desc;"
 
     def __init__(self, db_path):
         self.path = db_path
@@ -40,26 +40,27 @@ class DbQueries:
         connection.close()
         return
 
-    async def insert_rep(self, from_id: int, from_name: str, to_id: int, to_name: str,
+    async def insert_rep(self, from_id: int, from_name: str, to_id: int, to_name: str, rep_dt: dt.datetime,
                          rep_msg: str = None, cooldown: int = None) -> bool:
         """
         :param from_id: UserID of the user that gives the rep.
         :param from_name: username#1234 of the user that gives the rep.
         :param to_id: UserID of the user that is being rep'd.
         :param to_name: username#1234 of the user that is being rep'd.
+        :param rep_dt: The datetime that the reputation message was sent.
         :param rep_msg: (Optional) The message accompanied with the rep.
         :param cooldown: (Optional) The amount of seconds that need to have passed since the last time
                from_id rep'd to_id.
-        :return:
+        :return: A boolean which determines whether a reputation was eligible to be inserted or not.
         """
         if cooldown:
-            compare_stamp = dt.datetime.utcnow() - dt.timedelta(seconds=cooldown)
+            compare_stamp = rep_dt - dt.timedelta(seconds=cooldown)
             check_rows = await self.exec_sql(self.SELECT_REP_PAIR, [from_id, to_id, compare_stamp])
             can_insert = not check_rows  # Boolean, if check_rows is empty then the rep can be inserted.
         else:
             can_insert = True
         if can_insert:
-            stamp = str(dt.datetime.utcnow())
+            stamp = str(rep_dt)
             params = {"f_id": from_id, "f_n": from_name, "t_id": to_id, "t_n": to_name, "stamp": stamp, "msg": rep_msg}
             await self.exec_sql(self.INSERT_REP, params=params, commit=True)
         return can_insert
@@ -73,7 +74,12 @@ class DbQueries:
         resp = await self.exec_sql(self.SELECT_REP_COUNT, params=[user_id])
         return resp[0] if resp else None
 
-    async def rep_leaderboard(self):
+    async def rep_leaderboard(self) -> Optional[List[Tuple[int, int]]]:
+        """
+        :return: A list of tuples with the amount of reputations by userID, sorted on reputation count.
+
+        Get the full leaderboard for reputations
+        """
         leaderboard = await self.exec_sql(self.SELECT_LEADERBOARD)
         return leaderboard if leaderboard else None
 
