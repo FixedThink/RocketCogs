@@ -1,6 +1,8 @@
 # Default libraries.
 import re
+from collections import OrderedDict
 from json import dumps  # Only used for debug output formatting.
+from typing import Optional
 
 # Used by Red.
 import discord
@@ -10,14 +12,15 @@ from redbot.core.bot import Red
 import redbot.core.utils.menus as red_menu
 
 # Local files.
-from .conversions import best_playlist, com, get_tier_colour, get_tier_name, get_url_platform
+from .conversions import best_playlist, com, float_sr
+from .json_data import GetJsonData
 from .psyonix_calls import PsyonixCalls
 from .steam_calls import SteamCalls
 from .db_queries import DbQueries
 
 
 class LaFusee(commands.Cog):
-    """Rocket League rank commands."""
+    """Rocket League rank commands"""
     # Constants.
     PSY_TOKEN_LEN = 40
     STEAM_TOKEN_LEN = 32
@@ -27,7 +30,7 @@ class LaFusee(commands.Cog):
                            28: "Ranked Rumble", 29: "Ranked Dropshot", 30: "Ranked Snowday"}
     PLAYLIST_ID_MINIMAL = {0: "Casual", 10: "Duels", 11: "Doubles", 12: "Solo 3s", 13: "Standard",
                            27: "Hoops", 28: "Rumble", 29: "Dropshot", 30: "Snowday"}
-    PLAYLIST_ID_SHORT = {0: "Casual", 10: "1s", 11: "2s", 12: "s3s", 13: "3s", 27: "H🏀", 28: "R🥊", 29: "D⚡", 30: "S❄"}
+    PLAYLIST_ID_SHORT = {0: "Casual", 10: "1s", 11: "2s", 12: "ss", 13: "3s", 27: "🏀", 28: "🥊", 29: "⚡", 30: "🏒"}
     PLAYLIST_IDS = (0, 10, 11, 12, 13, 27, 28, 29, 30)
 
     # Emotes used in constants.
@@ -46,6 +49,8 @@ class LaFusee(commands.Cog):
     # Rank role configuration constants.
     R_CONF_DISABLED = BIN + "Successfully disabled the RL rank role functionality for this server."
     R_CONF_ENABLED = DONE + "Successfully enabled the RL rank role functionality for this server."
+    R_SPECIAL_IGNORE = DONE + "The rank role check will now ignore the special playlists."
+    R_SPECIAL_UNIGNORE = BIN + "The rank role check will no longer ignore the special playlists."
     R_CONF_SUCCESS = DONE + "Successfully added all roles!"
     R_CONF_NOT_ENABLED = "Don't forget to enable the RL rank role functionality by doing `{}{}`"
     R_CONF_INVALID_MODE = ERROR + "Invalid mode."
@@ -56,7 +61,7 @@ class LaFusee(commands.Cog):
     R_DETECT_SUCCESS = DONE + "Detected `{role_id}` for {tier_str}"
     R_DETECT_FAIL = ":x: Did not find a role for {tier_str}"
     R_DETECT_TOTAL = "**Total matches:** {match_count} out of 19\n{note}\n\n{rest}"
-    # Account registration + rank role update constants.
+    # Account registration + rank role update constants. TODO: modify strings for special_ignore config.
     LINKED_UNRANKED = "Your linked account is (currently) unranked in every playlist."
     RANK_ROLE_ADDED = "You received the {r_role} role, which is the highest rank of your linked account."
     RANK_ROLE_REMOVED = "Your rank roles are removed."
@@ -69,8 +74,9 @@ class LaFusee(commands.Cog):
     LINK_ROLE_UNRANKED = LINKED_UNRANKED + "\nThus, you cannot receive a rank role."
     LINK_REMOVED = BIN + "Successfully unlinked your {} ID from this account."
     LINK_AND_RANKROLE_REMOVED = LINK_REMOVED + "\nIf you had any rank roles, these were removed as well."  # 1 {}
+    # TODO: Modify string based on rankrole config.
     LINK_REMOVE_PROMPT = "**Are you sure you want to unlink your account?**\n" \
-                         "Keep in mind that you __don't__ have to unlink your account to update it.\n" \
+                         "Keep in mind that you __don't__ have to unlink your account to update any rank roles.\n" \
                          "If you are sure, resend this command, but with `yes` at the end, to unlink your {} ID. " \
                          "No action needed otherwise. {}"
     # General user link errors.
@@ -88,10 +94,10 @@ class LaFusee(commands.Cog):
     ASSERT_INT = "LaFusee: Invalid int for tier: {n} is not an integer between 0 and 19 inclusive."
     ASSERT_ROLE_CONFIG = "LaFusee: The role for tier {n} is not configured."
     ASSERT_ROLE_EXISTS = "LaFusee: The role with ID {r_id} ({tier_n}) does not exist."
-    # Minimal embed constants. Padding character (\u2800) is a Braille space.
-    MINIMAL_ONLY_MMR = "`{:\u2800<8}`  **{:0.2f}**"
-    MINIMAL_RANKED = "`{ls:\u2800<8}`  **{n:0.2f}**  ({bold}{tier_div}{bold})"
-    MINIMAL_NO_MATCHES = "`{:\u2800<8}`  *No matches played*"
+    # Embed row constants. Padding character (\u2800) is a Braille space.
+    E_ROW_ONLY_MMR = "`{:\u2800<{}}`  **{:0.2f}**"
+    E_ROW_RANKED = "`{ls:\u2800<{p}}`  **{n:0.2f}**  ({bold}{tier_div}{bold})"
+    E_ROW_NO_MATCHES = "`{:\u2800<{}}`  *No matches played*"
     # Other constants.
     STEAM_PROFILE_URL = "https://steamcommunity.com/profiles/{}"
 
@@ -103,10 +109,11 @@ class LaFusee(commands.Cog):
         self.config = Config.get_conf(self, identifier=80590423, force_registration=True)
         self.config.register_global(psy_token=None, steam_token=None)
         # Structure of rankrole_dict: {tier_n: role_id}
-        self.config.register_guild(rankrole_enabled=False, rankrole_dict={})
+        self.config.register_guild(rankrole_enabled=False, rankrole_dict={}, ignore_special=False)
         self.psy_api = PsyonixCalls(self)
         self.steam_api = SteamCalls(self)
         self.link_db = DbQueries(self.PATH_DB)
+        self.json_conv = GetJsonData()
 
     # Configuration commands.
     @commands.group(name="rl", invoke_without_command=True)
@@ -216,6 +223,19 @@ class LaFusee(commands.Cog):
         await self.config.guild(ctx.guild).rankrole_enabled.set(not is_enabled)
         await ctx.send(to_send)
 
+    @_rl_setup.command(name="toggle_special")
+    @checks.admin_or_permissions(administrator=True)
+    async def toggle_ignore_special(self, ctx):
+        """Toggle whether the rank role should ignore the special playlists"""
+        is_enabled = await self.config.guild(ctx.guild).ignore_special()
+        if is_enabled:
+            to_send = self.R_SPECIAL_UNIGNORE
+        else:
+            to_send = self.R_SPECIAL_IGNORE
+        # Set rankrole_enabled as the inverse of is_enabled (as this command is a toggle).
+        await self.config.guild(ctx.guild).rankrole_enabled.set(not is_enabled)
+        await ctx.send(to_send)
+
     @_rl_setup.command(name="set_roles")
     @checks.admin_or_permissions(administrator=True)
     async def set_rl_roles(self, ctx, mode: str):
@@ -234,8 +254,8 @@ class LaFusee(commands.Cog):
                 to_say = self.R_GENERATE_NO_PERMS
             else:
                 for i in reversed(range(1, 20)):  # Reversed because of hierarchy.
-                    role_colour = discord.Colour(get_tier_colour(i))
-                    role_name = get_tier_name(i)
+                    role_colour = discord.Colour(self.json_conv.get_tier_colour(i))
+                    role_name = self.json_conv.get_tier_name(i)
                     new_role = await gld.create_role(name=role_name, colour=role_colour, hoist=True)
                     role_dict[i] = new_role.id
                     progress_n = 20 - i
@@ -248,7 +268,7 @@ class LaFusee(commands.Cog):
             say_list = []
             matches = 0
             for i in range(1, 20):
-                tier_str = get_tier_name(i)
+                tier_str = self.json_conv.get_tier_name(i)
                 role = discord.utils.get(gld.roles, name=tier_str)
                 if role:
                     matches += 1
@@ -301,8 +321,9 @@ class LaFusee(commands.Cog):
                         edit_say = link_say
                     else:  # Rank roles are enabled.
                         # Check their highest roles, and give a role if this is not unranked.
-                        player_skills = response.get("player_skills")
-                        best_tier, best_list_id, played_lists = best_playlist(player_skills)
+                        player_skills = response.get("player_skills")  # Value is a list.
+                        ignore_special = await self.config.guild(ctx.guild).ignore_special()
+                        best_tier, best_list_id, played_lists = best_playlist(player_skills, ignore_special)
                         if best_tier == 0:  # Unranked, so no actual highest rank.
                             role_say = self.LINK_ROLE_UNRANKED  # Keep roles in the event one's ranks got inactive.
                         else:  # Does have a rank.
@@ -329,8 +350,9 @@ class LaFusee(commands.Cog):
                 if notice:
                     to_say = notice
                 else:
-                    player_skills = response.get("player_skills")
-                    best_tier, best_list_id, played_lists = best_playlist(player_skills)
+                    player_skills = response.get("player_skills")  # Value is a list.
+                    ignore_special = await self.config.guild(ctx.guild).ignore_special()
+                    best_tier, best_list_id, played_lists = best_playlist(player_skills, ignore_special)
                     if best_tier == 0:  # Unranked, so no actual highest rank.
                         to_say = self.RANK_ROLE_UPDATE_UNRANKED  # Keep roles in the event one's ranks got inactive.
                     else:  # Does have a rank.
@@ -366,7 +388,7 @@ class LaFusee(commands.Cog):
     # Rank lookup commands.
     @_rl.group(name="lfg", invoke_without_command=True)
     async def _lfg_embed(self, ctx, platform, profile_id):
-        """Show a ranking in LFG embed format"""
+        """Show a player's ranks in LFG embed format"""
         url_platform, url_id, notice = await self.platform_id_bundle(platform, profile_id)
         if not notice:
             response, notice = await self.psy_api.player_skills(url_platform, url_id)
@@ -394,6 +416,42 @@ class LaFusee(commands.Cog):
             if not notice:
                 embeds = self.make_lfg_embed(response, url_platform, user)
                 await red_menu.menu(ctx, embeds, red_menu.DEFAULT_CONTROLS, timeout=30.0)
+        if notice:
+            await ctx.send(notice)
+
+    # TODO: Add support for playlist-specific stats.
+    @_rl.group(name="rocket", invoke_without_command=True)
+    async def _rocket_embed(self, ctx, platform, profile_id):
+        """Show a player's stats in standard embed format"""
+        url_platform, url_id, notice = await self.platform_id_bundle(platform, profile_id)
+        if not notice:
+            response, notice = await self.psy_api.player_skills(url_platform, url_id)
+            if not notice:
+                gas_od, notice = await self.psy_api.player_stat_values(url_platform, url_id)
+                if not notice:
+                    await ctx.send(embed=self.make_rocket_embed(response, gas_od, url_platform))
+        if notice:
+            await ctx.send(notice)
+
+    @_rocket_embed.command(name="user", aliases=["me"])
+    async def rocket_user(self, ctx, user: discord.Member = None):
+        """Show the rocket embed of a member on this server
+
+        If no user is provided, it will show your own."""
+        if user is None:
+            user = ctx.author
+        url_platform, url_id = await self.link_db.select_user(user.id)
+        if None in (url_platform, url_id):  # User is not properly registered.
+            if user == ctx.author:
+                notice = self.AUTHOR_REGISTER_PROMPT.format(ctx.prefix, self.register_tag.qualified_name)
+            else:
+                notice = self.USER_NOT_REGISTERED
+        else:  # Valid registration.
+            response, notice = await self.psy_api.player_skills(url_platform, url_id)
+            if not notice:
+                gas_od, notice = await self.psy_api.player_stat_values(url_platform, url_id)
+                if not notice:
+                    await ctx.send(embed=self.make_rocket_embed(response, gas_od, url_platform))
         if notice:
             await ctx.send(notice)
 
@@ -520,7 +578,7 @@ class LaFusee(commands.Cog):
             role_to_add = discord.utils.get(gld.roles, id=exempt_role_id)
             assert role_to_add is not None, self.ASSERT_ROLE_EXISTS.format(r_id=exempt_role_id, tier_n=add_tier)
 
-            tier_name = get_tier_name(add_tier)
+            tier_name = self.json_conv.get_tier_name(add_tier)
             if len(member_r_roles) == 0:  # No current rank roles.
                 await mem.add_roles(role_to_add)
                 to_return = self.RANK_ROLE_ADDED.format(r_role=tier_name)
@@ -544,7 +602,7 @@ class LaFusee(commands.Cog):
         By default, number input for id_in (for Steam) will be treated as an ID3/ID64.
         In order to use vanity id that consists solely of digits, it must be prefixed with /id/"""
         notice = None
-        platform_out = get_url_platform(platform_in)
+        platform_out = self.json_conv.get_url_platform(platform_in)
         if not platform_out:
             notice = self.PLATFORM_INVALID
         elif platform_out == "switch":
@@ -583,31 +641,38 @@ class LaFusee(commands.Cog):
         The reason for this is that Valve accepts multiple ID64s for the same account."""
         return (id_64 % (2 ** 32)) + 76561197960265728
 
-    def rank_summary_str(self, player_skills: dict, best_list_id: int, unplayed_lists: set) -> (str, str):
-        """Return a string with a player's summarized rank in a given playlist
-
-        player_skills must be a dict that is provided by the API, or None if there are no stats.
-        best_list_id is the number of the playlist in which the user has the highest ranking.
-        unplayed_lists is a set of the playlists which the user has not played in."""
+    def rank_summary_str(self, player_skills: Optional[list], best_list_id: int, unplayed_lists: set,
+                         short: bool = False) -> (str, str):  # TODO: Use False explicitly in other methods.
+        """
+        :param player_skills: list that is extracted from the API response dict, or None if there are no stats.
+        :param best_list_id: The number of the playlist in which the user has the highest ranking.
+        :param unplayed_lists: A set of the playlists which the user has not played in.
+        :param short: (Optional) Whether to use short playlist names. Also drops casual ranking. Defaults to False.
+        :return: A string with a player's summarized rank in a given playlist
+        """
         desc_rows = {}
+        pad = 1 if short else 8
+        list_name_dict = self.PLAYLIST_ID_SHORT if short else self.PLAYLIST_ID_MINIMAL
         for i in player_skills:
-            rating = i["mu"] * 20 + 100
+            rating = float_sr(i)
             playlist_id = i["playlist"]
-            playlist = self.PLAYLIST_ID_MINIMAL[playlist_id]
-            if playlist_id == 0:  # == casual.
-                playlist_str = self.MINIMAL_ONLY_MMR.format(playlist, rating)
+            list_name = list_name_dict[playlist_id]
+            if playlist_id == 0 and short:
+                playlist_str = None
+            elif playlist_id == 0:
+                playlist_str = self.E_ROW_ONLY_MMR.format(list_name, pad, rating)
             else:
                 tier_n = i["tier"]
-                tier = get_tier_name(tier_n)
+                tier = self.json_conv.get_tier_name(tier_n)
                 div = i["division"] + 1
-                # Embolden best playlist.
-                bold = "**" if playlist_id == best_list_id else ""
+                bold = "**" if playlist_id == best_list_id else ""  # Embolden best playlist.
                 tier_div = "{} Div. {}".format(tier, div) if tier_n not in (0, 19) else tier
-                playlist_str = self.MINIMAL_RANKED.format(ls=playlist, n=rating, bold=bold, tier_div=tier_div)
-            desc_rows[playlist_id] = playlist_str
+                playlist_str = self.E_ROW_RANKED.format(ls=list_name, p=pad, n=rating, bold=bold, tier_div=tier_div)
+            if playlist_str:
+                desc_rows[playlist_id] = playlist_str
         for n in unplayed_lists:
-            playlist = self.PLAYLIST_ID_MINIMAL[n]
-            desc_rows[n] = self.MINIMAL_NO_MATCHES.format(playlist)
+            list_name = list_name_dict[n]
+            desc_rows[n] = self.E_ROW_NO_MATCHES.format(list_name, pad)
         # Split list into normal and special (to make menu-embed possible).
         normal_lists, special_lists = [], []
         for k, v in sorted(desc_rows.items()):
@@ -615,9 +680,9 @@ class LaFusee(commands.Cog):
         return "\n".join(normal_lists), "\n".join(special_lists)
 
     def make_lfg_embed(self, response: dict, url_platform: str, user: discord.Member = None) -> list:
-        """Make the embed for the LFG commands."""
+        """Make the embed for the LFG commands"""
         player_name = response["user_name"]
-        player_skills = response.get("player_skills")
+        player_skills = response.get("player_skills")  # Note: value is a list!
         if not player_skills:  # Debug exception.
             raise Exception("lfg -> No player skills")
         best_tier, best_list_id, played_lists = best_playlist(player_skills)
@@ -631,10 +696,44 @@ class LaFusee(commands.Cog):
         return_list = []
         for summary in summary_tuple:
             embed = discord.Embed()
-            embed.colour = get_tier_colour(best_tier)
+            embed.colour = self.json_conv.get_tier_colour(best_tier)
             embed.set_author(name="Rocket League Stats - {}".format(player_name), url=player_url)
             embed.description = summary
             if user:
                 embed.set_footer(text=f"ID: {user.id}", icon_url=user.avatar_url_as(static_format="png"))
             return_list.append(embed)
         return return_list
+
+    def make_rocket_embed(self, response: dict, gas_od: OrderedDict, url_platform: str,
+                          user: discord.Member = None) -> discord.Embed:
+        """Make the embed for the general stat commands"""
+        player_name = response["user_name"]
+        player_skills = response.get("player_skills")  # Note: value is a list!
+        if not player_skills:  # Debug exception.
+            raise Exception("rocket -> No player skills")
+        best_tier, best_list_id, played_lists = best_playlist(player_skills)
+        unplayed_lists = {n for n in self.PLAYLIST_IDS if n not in played_lists}
+        # Create rows for each playlist.
+        summary_tuple = self.rank_summary_str(player_skills, best_list_id, unplayed_lists, short=True)
+        # Get stats for casual (unranked) separately.
+        casual_rating = None
+        if 0 not in unplayed_lists:  # Thus, casual is played.
+            zero_dict = next(d for d in player_skills if d["playlist"] == 0)
+            casual_rating = float_sr(zero_dict)
+        casual_str = "\nCasual SR: **{}**".format(f"{casual_rating:0.2f}" if casual_rating else "*N/A*")
+        # Make strings for GAS.
+        gas_list = [f"{k.title()}: **{v}**" for k, v in gas_od.items()]
+        # Set author and description. Profile links only exist for Steam.
+        player_url = self.STEAM_PROFILE_URL.format(response["user_id"]) \
+            if url_platform == "steam" else discord.Embed.Empty
+        # Create embed, and use the highest tier's colour.
+        embed = discord.Embed()
+        embed.colour = self.json_conv.get_tier_colour(best_tier)
+        embed.set_thumbnail(url=self.json_conv.get_tier_icon(best_tier))
+        embed.set_author(name="Rocket League Stats - {}".format(player_name), url=player_url)
+        if user:
+            embed.set_footer(text=f"ID: {user.id}", icon_url=user.avatar_url_as(static_format="png"))
+        # Add stat fields.
+        embed.add_field(name="General", value="\n".join((*gas_list, casual_str)))
+        embed.add_field(name="Competitive", value="\n".join(summary_tuple))
+        return embed

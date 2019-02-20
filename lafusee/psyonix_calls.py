@@ -17,7 +17,7 @@ class PsyonixCalls:
     API_RANK = API_URL + "playerskills/{uid}"  # {} * 2
     API_TITLES = API_URL + "playertitles/{uid}"  # {} * 2
 
-    GAS_LIST = ["wins", "mvps", "goals", "assists", "saves", "shots"]
+    GAS_LIST = ["goals", "assists", "saves", "wins", "mvps", "shots"]
     PSY_TOKEN_NONE = ERROR + "No token set for the Psyonix API."
     # Constants based on status codes.
     PLAYER_ERROR = ERROR + "That ID is not associated with an account that has played Rocket League.\n" \

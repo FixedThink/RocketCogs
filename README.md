@@ -26,16 +26,18 @@ Other planned commands include:
 
 - **stats [playlist]** - if no playlist is provided, display someone's ranking performance, as well as general online 
 stats (goals, assists, etc). If a playlist is provided, it displays more specific stats of the player in that playlist, 
-such as their amount of matches played.
+such as their amount of matches played. *[At the moment, only the no-playlist part is added]*
 
 - *more to follow*
 
 
 #### Rank roles
-In addition to the account registration, this cog has a built-in rank role feature. 
-This feature allows a guild to automatically assign a rank role to its members when they register their account. 
-For this, the guild staff can either manually create the roles, and make the bot automatically detect them, 
-or let the bot make the roles needed for them. The rank role functionality is optional, and is turned off by default.
+In addition to the account registration, this cog has a built-in rank role feature. The feature is optional and turned off by default.
+The rank role functionality allows a guild to automatically assign a rank role to its members when they register their account. 
+To set this up, the guild staff can either manually create the roles and make the bot automatically detect them, 
+or let the bot make the roles needed for them.
+It is also possible make special playlists (e.g. rumble) not count for a role (by default they do count).
+
 
 ## Reputation
 Reputation allows users to give recommendations about other users in the form of a reputation. 
@@ -45,16 +47,18 @@ the cog was made as versatile as possible so that it can be used in other circum
 
 Configuration options include:
 
-- **Reputation role** - When a user receives a certain amount of reputation (configurable!), they become eligible for a
+- **Reputation role** – When a user receives a certain amount of reputation (configurable!), they become eligible for a
 reputation role. The role is optional, and if not provided no role will be given.
-- **Reputation role threshold** - Allows you so set the threshold for the role.
-- **Cooldown** - By default, one user can give another user reputation more than once. 
+- **Reputation role threshold** – Allows the threshold for the role to be set.
+- **Cooldown** – By default, one user can give another user reputation more than once. 
 However, this is restricted by a cooldown: by default there must be at least 1 week between to consequent reputations to the same user.
 As of now this cannot be configured to be forbidden (yet), but this is planned before the stable release.
 Until then, the cooldown can be set sufficiently high (e.g. 10000 days), which will effectively give the same result.
-- **Role decay** After a set period, a user may use their reputation role if they haven't received enough reputation
+- **Role decay** – After a set period, a user may lose their reputation role if they haven't received enough reputation
 in that period. This period is configurable, as well as the amount of reputations needed in that period (see below).
-- **Decay threshold** If role decay is enabled (and the role is enabled in the first place),
+- **Decay threshold** – If role decay is enabled (and the role is enabled in the first place),
 this configuration option determines the reputation threshold needed in the decay period.
+- **Role abstention** – Some users may not want to get a role for their reputation for example to not be prominent.
+For that reason, users will be able to opt-out from receiving a role, while still be able to receive and give reputation.
 
  

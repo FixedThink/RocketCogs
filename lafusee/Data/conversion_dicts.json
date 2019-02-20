@@ -1,0 +1,56 @@
+{
+  "embed_divmod_colours" : {
+    "0": "0xca8700",
+    "1": "0xdadada",
+    "2": "0x909090",
+    "3": "0xddbb20",
+    "4": "0x10bbee",
+    "5": "0x10abcd",
+    "6": "0xaa60dd",
+    "7": "0xbb00bb"
+  },
+  "platform_convert" : {
+    "pc_names" : ["pc", "steam"],
+    "ps4_names" : ["ps4", "psn"],
+    "xbox_names" : ["xbox", "xb1", "xboxone"],
+    "switch_names" : ["switch", "nintendo", "swi", "nintendoswitch"]
+  },
+  "roman_numerals" : {
+    "1": "I",
+    "2": "II",
+    "3": "III",
+    "4": "IV"
+  },
+  "tier_divmod_names" : {
+    "0": "Unranked",
+    "1": "Bronze",
+    "2": "Silver",
+    "3": "Gold",
+    "4": "Platinum",
+    "5": "Diamond",
+    "6": "Champion",
+    "7": "Grand Champion"
+  },
+  "tier_icons" : {
+    "0" : "https://cdn.discordapp.com/attachments/238709179790000140/547885550997340201/Unranked.png",
+    "1" : "https://cdn.discordapp.com/attachments/289456336884727820/294448679526465536/Bronze_I.png",
+    "2" : "https://cdn.discordapp.com/attachments/289456336884727820/294448703559827456/Bronze_II.png",
+    "3" : "https://cdn.discordapp.com/attachments/289456336884727820/294448761520914432/Bronze_III.png",
+    "4" : "https://cdn.discordapp.com/attachments/289456336884727820/294448833247576064/Silver_I.png",
+    "5" : "https://cdn.discordapp.com/attachments/289456336884727820/294448843251253250/Silver_II.png",
+    "6" : "https://cdn.discordapp.com/attachments/289456336884727820/294448855573856256/Silver_III.png",
+    "7" : "https://cdn.discordapp.com/attachments/289456336884727820/294448886053863424/Gold_I.png",
+    "8" : "https://cdn.discordapp.com/attachments/289456336884727820/294448898943090688/Gold_II.png",
+    "9" : "https://cdn.discordapp.com/attachments/289456336884727820/294448910976548865/Gold_III.png",
+    "10" : "https://cdn.discordapp.com/attachments/289456336884727820/294449007353266177/Platinum_I.png",
+    "11" : "https://cdn.discordapp.com/attachments/289456336884727820/294449021018308609/Platinum_II.png",
+    "12" : "https://cdn.discordapp.com/attachments/289456336884727820/294449035018764288/Platinum_III.png",
+    "13" : "https://cdn.discordapp.com/attachments/289456336884727820/294449081198051329/Diamond_I.png",
+    "14" : "https://cdn.discordapp.com/attachments/289456336884727820/294449096574631946/Diamond_II.png",
+    "15" : "https://cdn.discordapp.com/attachments/289456336884727820/294449109115600896/Diamond_III.png",
+    "16" : "https://cdn.discordapp.com/attachments/289456336884727820/294449157740036096/Champ_I.png",
+    "17" : "https://cdn.discordapp.com/attachments/289456336884727820/294449182742151168/Champ_II.png",
+    "18" : "https://cdn.discordapp.com/attachments/289456336884727820/294449244629368834/Champ_III.png",
+    "19" : "https://cdn.discordapp.com/attachments/289456336884727820/294449306541359105/Grand_Champion.png"
+    }
+}

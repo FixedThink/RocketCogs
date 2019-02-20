@@ -52,7 +52,7 @@ class SteamCalls:
                 elif resp_status == 400:
                     error = self.STEAM_BAD_REQUEST
                     print("Invalid request URL: {}".format(request_url))
-                elif resp_status in {500, 502}:
+                elif resp_status in {500, 502, 503}:
                     error = self.SERVER_ERROR.format(resp_status)
                 else:
                     raise Exception(self.UNKNOWN_STATUS_ERROR.format(resp_status, request_url))
