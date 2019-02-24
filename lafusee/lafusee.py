@@ -229,7 +229,7 @@ class LaFusee(commands.Cog):
         else:
             to_send = self.R_SPECIAL_IGNORE
         # Set rankrole_enabled as the inverse of is_enabled (as this command is a toggle).
-        await self.config.guild(ctx.guild).rankrole_enabled.set(not is_enabled)
+        await self.config.guild(ctx.guild).ignore_special.set(not is_enabled)
         await ctx.send(to_send)
 
     @_rl_setup.command(name="set_roles")
@@ -581,15 +581,6 @@ class LaFusee(commands.Cog):
             to_say = "`{}` could not be split".format(steam_url)
         await ctx.send(to_say)
 
-    @_tests.command(name="colour")
-    @checks.admin_or_permissions(administrator=True)
-    async def test_embed_colour(self, ctx, hex_code):
-        """Test embed colours"""
-        embed = discord.Embed(title="Tell me, black or white?", colour=int(hex_code, 16))
-        embed.description = "This is just a description\nthat is split in two lines for some reason."
-        embed.set_footer(text="Hex code: {}".format(hex_code))
-        await ctx.send(embed=embed)
-
     # Utilities
     async def update_member_rankroles(self, gld: discord.Guild, mem: discord.Member, add_tier: int = None) -> str:
         """Update the rank roles of a user
@@ -676,7 +667,8 @@ class LaFusee(commands.Cog):
     def int_to_steam_id64(id_64: int) -> int:
         """Converts a SteamID64 to the one that the Psyonix API recognises
 
-        The reason for this is that Valve accepts multiple ID64s for the same account."""
+        The reason for this is that Valve accepts multiple ID64s for the same account.
+        As a consequence, Discord Steam links use an ID64 that is not recognised by the Rocket League API."""
         return (id_64 % (2 ** 32)) + 76561197960265728
 
     def rank_summary_str(self, player_skills: Optional[list], best_list_id: int, unplayed_lists: set,

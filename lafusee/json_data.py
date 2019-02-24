@@ -27,7 +27,6 @@ class GetJsonData:
         self.str_to_platform: Dict[str, list] = json_dict["platform_convert"]
         self.str_to_playlist: Dict[str, int] = json_dict["playlist_convert"]
         self.int_to_plist_str: Dict[str, Dict[int, str]] = {}  # To be filled.
-        print(json_dict["playlist_names"])
         for k, v in json_dict["playlist_names"].items():  # Manually unpack nested dict to convert str keys to int.
             self.int_to_plist_str[k] = _json_key_to_int(v)
 
