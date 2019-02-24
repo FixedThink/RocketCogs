@@ -28,6 +28,9 @@ class Reputation(commands.Cog):
     COOLDOWN_CLEARED = BIN + "Set the reputation cooldown back to the default settings."
     COOLDOWN_REMOVED = BIN + "Disabled the reputation cooldown."
     COOLDOWN_SET = DONE + "Set the reputation cooldown to {}."
+    DECAY_CLEARED = BIN + "Set the reputation decay back to the default settings."
+    DECAY_REMOVED = BIN + "Disabled reputation decay."
+    DECAY_SET = DONE + "Set the reputation decay to {}"
     REP_NOT_COOL = ERROR + "You have given that user a reputation too recently!"
     REP_COMMENT_HAS_AT = ERROR + "Please do not tag any people in the rep reason!\n" \
                                  "If you must mention someone, use their name instead."
@@ -44,7 +47,6 @@ class Reputation(commands.Cog):
         self.FOLDER = str(data_manager.cog_data_path(self))
         self.PATH_DB = self.FOLDER + "/reputation.db"
         self.config = Config.get_conf(self, identifier=5006, force_registration=True)
-        # TODO: Make decay period configurable with a command (like cooldown).
         # TODO: Make active/abstain roles configurable with command.
         # TODO: Make role/decay threshold configurable with a command, where < 0 resets and == 0 gives error.
         self.config.register_guild(cooldown_period=self.DEFAULT_COOLDOWN, decay_period=self.DEFAULT_DECAY,
@@ -89,16 +91,33 @@ class Reputation(commands.Cog):
         """
         gld = ctx.guild
         delta = dt.timedelta(days=days, hours=hours, minutes=minutes, seconds=seconds)
-        delta_sec = int(delta.total_seconds())  # float by default.
+        delta_sec = int(delta.total_seconds())  # Float by default.
         if delta_sec < 0:  # Clear config.
             await self.config.guild(gld).cooldown_period.clear()
             msg = self.COOLDOWN_CLEARED
         elif delta_sec == 0:  # Set config to None.
             await self.config.guild(gld).cooldown_period.set(None)
             msg = self.COOLDOWN_REMOVED
-        else:  # Set time provided.
+        else:  # Set cooldown to time provided.
             await self.config.guild(gld).cooldown_period.set(delta_sec)
             msg = self.COOLDOWN_SET.format(str(delta))
+        await ctx.send(msg)
+
+    @checks.admin_or_permissions(administrator=True)
+    @_reputation_settings.command(name="decay")
+    async def set_rep_decay(self, ctx, days: int, hours: int = 0, minutes: int = 0, seconds: int = 0):
+        gld = ctx.guild
+        delta = dt.timedelta(days=days, hours=hours, minutes=minutes, seconds=seconds)
+        delta_sec = int(delta.total_seconds())  # Float by default.
+        if delta_sec < 0:  # Clear config.
+            await self.config.guild(gld).decay_period.clear()
+            msg = self.DECAY_CLEARED
+        elif delta_sec == 0:  # Set config to None.
+            await self.config.guild(gld).cooldown_period.set(None)
+            msg = self.DECAY_REMOVED
+        else:  # Set decay to time provided.
+            await self.config.guild(gld).decay_period.set(delta_sec)
+            msg = self.DECAY_SET.format(str(delta))
         await ctx.send(msg)
 
     @commands.guild_only()
