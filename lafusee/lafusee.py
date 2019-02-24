@@ -12,7 +12,7 @@ from redbot.core.bot import Red
 import redbot.core.utils.menus as red_menu
 
 # Local files.
-from .conversions import best_playlist, com, float_sr
+from .static_functions import best_playlist, com, float_sr
 from .json_data import GetJsonData
 from .psyonix_calls import PsyonixCalls
 from .steam_calls import SteamCalls
@@ -24,13 +24,6 @@ class LaFusee(commands.Cog):
     # Constants.
     PSY_TOKEN_LEN = 40
     STEAM_TOKEN_LEN = 32
-    # Playlist tuples, sets, and dicts.
-    PLAYLIST_ID_TO_NAME = {0: "Casual", 10: "Ranked Duel 1v1", 11: "Ranked Doubles 2v2",
-                           12: "Ranked Solo Standard 3v3", 13: "Ranked Standard 3v3", 27: "Ranked Hoops",
-                           28: "Ranked Rumble", 29: "Ranked Dropshot", 30: "Ranked Snowday"}
-    PLAYLIST_ID_MINIMAL = {0: "Casual", 10: "Duels", 11: "Doubles", 12: "Solo 3s", 13: "Standard",
-                           27: "Hoops", 28: "Rumble", 29: "Dropshot", 30: "Snowday"}
-    PLAYLIST_ID_SHORT = {0: "Casual", 10: "1s", 11: "2s", 12: "ss", 13: "3s", 27: "🏀", 28: "🥊", 29: "⚡", 30: "🏒"}
     PLAYLIST_IDS = (0, 10, 11, 12, 13, 27, 28, 29, 30)
 
     # Emotes used in constants.
@@ -61,9 +54,9 @@ class LaFusee(commands.Cog):
     R_DETECT_SUCCESS = DONE + "Detected `{role_id}` for {tier_str}"
     R_DETECT_FAIL = ":x: Did not find a role for {tier_str}"
     R_DETECT_TOTAL = "**Total matches:** {match_count} out of 19\n{note}\n\n{rest}"
-    # Account registration + rank role update constants. TODO: modify strings for special_ignore config.
-    LINKED_UNRANKED = "Your linked account is (currently) unranked in every playlist."
-    RANK_ROLE_ADDED = "You received the {r_role} role, which is the highest rank of your linked account."
+    # Account registration + rank role update constants.
+    LINKED_UNRANKED = "Your linked account is (currently) unranked in every (eligible) playlist."
+    RANK_ROLE_ADDED = "You received the {r_role} role, which is the highest (eligible) rank of your linked account."
     RANK_ROLE_REMOVED = "Your rank roles are removed."
     RANK_ROLE_INTACT = "You already seem to have the right rank role ({r_role}), so your roles are not changed."
     RANK_ROLE_UPDATED = "Your rank role is successfully updated to {r_role}."
@@ -90,14 +83,17 @@ class LaFusee(commands.Cog):
     SWITCH_UNSUPPORTED = ERROR + "Psyonix does not (yet) support rank queries for the Nintendo Switch.\n" \
                                  "When they do, this command will support it as soon as possible."
     PLATFORM_INVALID = ERROR + "That platform does not exist."
+    # Playlist validation constants.
+    PLAYLIST_INVALID = ERROR + "Did not recognise playlist input."
+    PLAYLIST_NOT_PLAYED = ERROR + "This player has not played {plist}!"
     # Assertion error constants.
     ASSERT_INT = "LaFusee: Invalid int for tier: {n} is not an integer between 0 and 19 inclusive."
     ASSERT_ROLE_CONFIG = "LaFusee: The role for tier {n} is not configured."
     ASSERT_ROLE_EXISTS = "LaFusee: The role with ID {r_id} ({tier_n}) does not exist."
-    # Embed row constants. Padding character (\u2800) is a Braille space.
-    E_ROW_ONLY_MMR = "`{:\u2800<{}}`  **{:0.2f}**"
-    E_ROW_RANKED = "`{ls:\u2800<{p}}`  **{n:0.2f}**  ({bold}{tier_div}{bold})"
-    E_ROW_NO_MATCHES = "`{:\u2800<{}}`  *No matches played*"
+    # Embed row constants. Padding character (\u2800) is a Braille space, and spacing is an en space (\u2002).
+    E_ROW_ONLY_MMR = "`{:\u2800<{}}`\u2002**{:0.2f}**"
+    E_ROW_RANKED = "`{ls:\u2800<{p}}`\u2002**{n:0.2f}**\u2002({bold}{tier_div}{bold})"
+    E_ROW_NO_MATCHES = "`{:\u2800<{}}`\u2002*No matches played*"
     # Other constants.
     STEAM_PROFILE_URL = "https://steamcommunity.com/profiles/{}"
 
@@ -245,7 +241,7 @@ class LaFusee(commands.Cog):
         **generate** - creates new rank roles and automatically saves them
         **detect** - detects existing roles based on their name.
 
-        For `detect`, the role names must have proper capitalization and roman numerals, like \"Diamond III\"."""
+        For `detect`, the role names must have proper capitalisation and roman numerals, like \"Diamond III\"."""
         gld = ctx.guild
         low_mode = mode.lower()
         if low_mode == "generate":
@@ -335,7 +331,7 @@ class LaFusee(commands.Cog):
 
     @_rl.command(name="update")
     async def update_rank_role(self, ctx):
-        """Update your rank role based on the current best ranked of your linked account"""
+        """Update your rank role based on the current best rank of your linked account"""
         gld = ctx.guild
         rankrole_enabled = await self.config.guild(gld).rankrole_enabled()
         if rankrole_enabled is False:
@@ -387,7 +383,7 @@ class LaFusee(commands.Cog):
 
     # Rank lookup commands.
     @_rl.group(name="lfg", invoke_without_command=True)
-    async def _lfg_embed(self, ctx, platform, profile_id):
+    async def _lfg_embed(self, ctx, platform: str, profile_id: str):
         """Show a player's ranks in LFG embed format"""
         url_platform, url_id, notice = await self.platform_id_bundle(platform, profile_id)
         if not notice:
@@ -419,9 +415,8 @@ class LaFusee(commands.Cog):
         if notice:
             await ctx.send(notice)
 
-    # TODO: Add support for playlist-specific stats.
-    @_rl.group(name="rocket", invoke_without_command=True)
-    async def _rocket_embed(self, ctx, platform, profile_id):
+    @_rl.group(name="stats", aliases=["rocket"], invoke_without_command=True)
+    async def _rocket_embed(self, ctx, platform: str, profile_id: str):
         """Show a player's stats in standard embed format"""
         url_platform, url_id, notice = await self.platform_id_bundle(platform, profile_id)
         if not notice:
@@ -455,15 +450,58 @@ class LaFusee(commands.Cog):
         if notice:
             await ctx.send(notice)
 
+    @_rl.group(name="lstats", aliases=["liststats", "list"], invoke_without_command=True)
+    async def _plist_embed(self, ctx, platform: str, profile_id: str, playlist: str):
+        """Show a player's stats of a specific playlist"""
+        # Validate playlist input.
+        list_id = self.json_conv.get_input_playlist(playlist)
+        if list_id is None:  # Can be 0, so None should be explicit.
+            notice = self.PLAYLIST_INVALID
+        else:  # Get platform / ID.
+            url_platform, url_id, notice = await self.platform_id_bundle(platform, profile_id)
+            if not notice:  # Get player skills.
+                response, notice = await self.psy_api.player_skills(url_platform, url_id)
+                if not notice:
+                    content, embed = self.make_plist_embed(response, list_id, url_platform)
+                    await ctx.send(content, embed=embed)
+        if notice:
+            await ctx.send(notice)
+
+    @_plist_embed.command(name="user", aliases=["me"])
+    async def plist_user(self, ctx, playlist: str, user: discord.Member = None):
+        """Show a server member's stats of a specific playlist
+
+        If no user is provided, it will show your own."""
+        # Validate playlist input.
+        list_id = self.json_conv.get_input_playlist(playlist)
+        if list_id is None:  # Can be 0, so None should be explicit.
+            notice = self.PLAYLIST_INVALID
+        else:  # Get user from DB.
+            if user is None:
+                user = ctx.author
+            url_platform, url_id = await self.link_db.select_user(user.id)
+            if None in (url_platform, url_id):  # User is not properly registered.
+                if user == ctx.author:
+                    notice = self.AUTHOR_REGISTER_PROMPT.format(ctx.prefix, self.register_tag.qualified_name)
+                else:
+                    notice = self.USER_NOT_REGISTERED
+            else:  # Valid registration.
+                response, notice = await self.psy_api.player_skills(url_platform, url_id)
+                if not notice:
+                    content, embed = self.make_plist_embed(response, list_id, url_platform)
+                    await ctx.send(content, embed=embed)
+        if notice:
+            await ctx.send(notice)
+
     # Debug commands.
-    @checks.mod_or_permissions(administrator=True)
+    @checks.admin_or_permissions(administrator=True)
     @commands.group(name="rltest", invoke_without_command=True)
     async def _tests(self, ctx):
         """Debug commands for the RL module"""
         await ctx.send_help()
 
     @_tests.command(name="skills")
-    @checks.mod_or_permissions(administrator=True)
+    @checks.admin_or_permissions(administrator=True)
     async def skills_test(self, ctx, platform, profile_id):
         """Used for seeing the response of a PlayerSkills query"""
         url_platform, url_id, notice = await self.platform_id_bundle(platform, profile_id)
@@ -479,7 +517,7 @@ class LaFusee(commands.Cog):
             await ctx.send(notice)
 
     @_tests.command(name="titles")
-    @checks.mod_or_permissions(administrator=True)
+    @checks.admin_or_permissions(administrator=True)
     async def titles_test(self, ctx, platform, profile_id):
         """Used for seeing the response of a PlayerTitles query"""
         url_platform, url_id, notice = await self.platform_id_bundle(platform, profile_id)
@@ -491,7 +529,7 @@ class LaFusee(commands.Cog):
             await ctx.send(notice)
 
     @_tests.command(name="raw")
-    @checks.mod_or_permissions(administrator=True)
+    @checks.admin_or_permissions(administrator=True)
     async def raw_skills(self, ctx, platform, profile_id):
         """Used for seeing the response of a PlayerSkills query"""
         url_platform, url_id, notice = await self.platform_id_bundle(platform, profile_id)
@@ -503,7 +541,7 @@ class LaFusee(commands.Cog):
             await ctx.send(notice)
 
     @_tests.command(name="gas")
-    @checks.mod_or_permissions(administrator=True)
+    @checks.admin_or_permissions(administrator=True)
     async def gas_test(self, ctx, platform, profile_id):
         """Test the loop query for gas-stats"""
         url_platform, url_id, notice = await self.platform_id_bundle(platform, profile_id)
@@ -515,21 +553,21 @@ class LaFusee(commands.Cog):
             await ctx.send(notice)
 
     @_tests.command(name="vanity")
-    @checks.mod_or_permissions(administrator=True)
+    @checks.admin_or_permissions(administrator=True)
     async def test_vanity(self, ctx, vanity_id):
         """Used for testing the Steam API vanity id conversion"""
         response, notice = await self.steam_api.vanity_to_id64(vanity_id)
         await ctx.send("{}\n{}".format(response, notice))
 
     @_tests.command(name="user_bundle")
-    @checks.mod_or_permissions(administrator=True)
+    @checks.admin_or_permissions(administrator=True)
     async def test_platform_id_bundle(self, ctx, platform, profile_id):
         """Used for testing the platform - gamerID bundle"""
         url_platform, url_id, notice = await self.platform_id_bundle(platform, profile_id)
         await ctx.send("{} - {} \n{}".format(url_platform, url_id, notice))
 
     @_tests.command(name="re")
-    @checks.mod_or_permissions(administrator=True)
+    @checks.admin_or_permissions(administrator=True)
     async def test_regex_split(self, ctx, steam_url):
         """Used for testing regex for the platform bundle"""
         id_split = re.split(r'/id/', steam_url, maxsplit=1)
@@ -544,7 +582,7 @@ class LaFusee(commands.Cog):
         await ctx.send(to_say)
 
     @_tests.command(name="colour")
-    @checks.mod_or_permissions(administrator=True)
+    @checks.admin_or_permissions(administrator=True)
     async def test_embed_colour(self, ctx, hex_code):
         """Test embed colours"""
         embed = discord.Embed(title="Tell me, black or white?", colour=int(hex_code, 16))
@@ -602,7 +640,7 @@ class LaFusee(commands.Cog):
         By default, number input for id_in (for Steam) will be treated as an ID3/ID64.
         In order to use vanity id that consists solely of digits, it must be prefixed with /id/"""
         notice = None
-        platform_out = self.json_conv.get_url_platform(platform_in)
+        platform_out = self.json_conv.get_input_platform(platform_in)
         if not platform_out:
             notice = self.PLATFORM_INVALID
         elif platform_out == "switch":
@@ -636,42 +674,39 @@ class LaFusee(commands.Cog):
 
     @staticmethod
     def int_to_steam_id64(id_64: int) -> int:
-        """Converts a SteamID64 to the one that the Psyonix API recognizes
+        """Converts a SteamID64 to the one that the Psyonix API recognises
 
         The reason for this is that Valve accepts multiple ID64s for the same account."""
         return (id_64 % (2 ** 32)) + 76561197960265728
 
     def rank_summary_str(self, player_skills: Optional[list], best_list_id: int, unplayed_lists: set,
-                         short: bool = False) -> (str, str):  # TODO: Use False explicitly in other methods.
+                         drop_casual: bool = False) -> (str, str):
         """
         :param player_skills: list that is extracted from the API response dict, or None if there are no stats.
         :param best_list_id: The number of the playlist in which the user has the highest ranking.
         :param unplayed_lists: A set of the playlists which the user has not played in.
-        :param short: (Optional) Whether to use short playlist names. Also drops casual ranking. Defaults to False.
-        :return: A string with a player's summarized rank in a given playlist
+        :param drop_casual: (Optional) Whether to drop casual ranking. Defaults to False.
+        :return: A string with a player's summarised rank in a given playlist
         """
         desc_rows = {}
-        pad = 1 if short else 8
-        list_name_dict = self.PLAYLIST_ID_SHORT if short else self.PLAYLIST_ID_MINIMAL
+        pad = 8
+        mode_int = 2
         for i in player_skills:
             rating = float_sr(i)
             playlist_id = i["playlist"]
-            list_name = list_name_dict[playlist_id]
-            if playlist_id == 0 and short:
+            list_name = self.json_conv.get_playlist_name(playlist_id, mode_int)
+            if playlist_id == 0 and drop_casual:
                 playlist_str = None
             elif playlist_id == 0:
                 playlist_str = self.E_ROW_ONLY_MMR.format(list_name, pad, rating)
             else:
-                tier_n = i["tier"]
-                tier = self.json_conv.get_tier_name(tier_n)
-                div = i["division"] + 1
+                tier_div = self.json_conv.tier_div_str(i)
                 bold = "**" if playlist_id == best_list_id else ""  # Embolden best playlist.
-                tier_div = "{} Div. {}".format(tier, div) if tier_n not in (0, 19) else tier
                 playlist_str = self.E_ROW_RANKED.format(ls=list_name, p=pad, n=rating, bold=bold, tier_div=tier_div)
             if playlist_str:
                 desc_rows[playlist_id] = playlist_str
         for n in unplayed_lists:
-            list_name = list_name_dict[n]
+            list_name = self.json_conv.get_playlist_name(n, mode_int)
             desc_rows[n] = self.E_ROW_NO_MATCHES.format(list_name, pad)
         # Split list into normal and special (to make menu-embed possible).
         normal_lists, special_lists = [], []
@@ -689,7 +724,7 @@ class LaFusee(commands.Cog):
         unplayed_lists = {n for n in self.PLAYLIST_IDS if n not in played_lists}
         # Create rows for each playlist.
         summary_tuple = self.rank_summary_str(player_skills, best_list_id, unplayed_lists)
-        # Set author and description. Profile links only exist for Steam.
+        # Get author URL. Profile links only exist for Steam.
         player_url = self.STEAM_PROFILE_URL.format(response["user_id"]) \
             if url_platform == "steam" else discord.Embed.Empty
         # Create embed, and use the highest tier's colour.
@@ -714,7 +749,7 @@ class LaFusee(commands.Cog):
         best_tier, best_list_id, played_lists = best_playlist(player_skills)
         unplayed_lists = {n for n in self.PLAYLIST_IDS if n not in played_lists}
         # Create rows for each playlist.
-        summary_tuple = self.rank_summary_str(player_skills, best_list_id, unplayed_lists, short=True)
+        summary_tuple = self.rank_summary_str(player_skills, best_list_id, unplayed_lists, drop_casual=True)
         # Get stats for casual (unranked) separately.
         casual_rating = None
         if 0 not in unplayed_lists:  # Thus, casual is played.
@@ -723,12 +758,13 @@ class LaFusee(commands.Cog):
         casual_str = "\nCasual SR: **{}**".format(f"{casual_rating:0.2f}" if casual_rating else "*N/A*")
         # Make strings for GAS.
         gas_list = [f"{k.title()}: **{v}**" for k, v in gas_od.items()]
-        # Set author and description. Profile links only exist for Steam.
+        # Get author URL. Profile links only exist for Steam.
         player_url = self.STEAM_PROFILE_URL.format(response["user_id"]) \
             if url_platform == "steam" else discord.Embed.Empty
         # Create embed, and use the highest tier's colour.
         embed = discord.Embed()
         embed.colour = self.json_conv.get_tier_colour(best_tier)
+        embed.description = "Reward level: {}".format(self.json_conv.reward_level_str(response))
         embed.set_thumbnail(url=self.json_conv.get_tier_icon(best_tier))
         embed.set_author(name="Rocket League Stats - {}".format(player_name), url=player_url)
         if user:
@@ -737,3 +773,43 @@ class LaFusee(commands.Cog):
         embed.add_field(name="General", value="\n".join((*gas_list, casual_str)))
         embed.add_field(name="Competitive", value="\n".join(summary_tuple))
         return embed
+
+    def make_plist_embed(self, response: dict, list_id: int, url_platform: str,
+                         user: discord.Member = None) -> (Optional[str], Optional[discord.Embed]):
+        """Create a playlist-specific embed
+
+        Returns message content (if applicable) and an embed (if there is one)."""
+        player_skills = response.get("player_skills")
+        if not player_skills:
+            raise Exception("plist -> no player skills")
+        list_name = self.json_conv.get_playlist_name(list_id, mode=3)
+        p_dict = next((d for d in player_skills if d["playlist"] == list_id), None)  # No fixed order.
+        if not p_dict:
+            content, embed = self.PLAYLIST_NOT_PLAYED.format(plist=list_name), None
+        elif list_id == 0:
+            content, embed = ("**{} stats**\nRating: {}\nMu/MMR: {}\nSigma:{}"
+                              .format(list_name, float_sr(p_dict), p_dict["mu"], p_dict["sigma"])), None
+        else:  # Embed can be made.
+            player_name = response["user_name"]
+            # Unpack rating values.
+            tier_div = self.json_conv.tier_div_str(p_dict)
+            sr = float_sr(p_dict)
+            matches = p_dict["matches_played"]
+            streak = p_dict["win_streak"]
+            tier_n = p_dict["tier"]  # Needed for thumb and colour.
+            # Get author URL. Profile links only exist for Steam.
+            player_url = self.STEAM_PROFILE_URL.format(response["user_id"]) \
+                if url_platform == "steam" else discord.Embed.Empty
+            # Create embed.
+            content, embed = None, discord.Embed(description=tier_div)
+            embed.colour = self.json_conv.get_tier_colour(tier_n)
+            embed.set_thumbnail(url=self.json_conv.get_tier_icon(tier_n))
+            embed.set_author(name="{} stats - {}".format(list_name, player_name), url=player_url)
+            embed.add_field(name="Rating", value=f"{sr:0.2f}")
+            embed.add_field(name="Matches played", value="{} (Streak: {})".format(matches, streak))
+            misc = "Mu/MMR: {} | Sigma: {}".format(p_dict["mu"], p_dict["sigma"])
+            if user:
+                embed.set_footer(text=f"ID: {user.id} | {misc}", icon_url=user.avatar_url_as(static_format="png"))
+            else:
+                embed.set_footer(text=misc)
+        return content, embed

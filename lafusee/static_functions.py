@@ -45,7 +45,7 @@ def com(ctx, command, tick: bool = True) -> str:
 
 def float_sr(skills_item: dict) -> float:
     """
-    :param skills_item: An item of the "player_skills" list in the PlayerSkills API response dict.
+    :param skills_item: An item (playlist) of the "player_skills" list in the PlayerSkills API response dict.
     :return: Skill rating in float format.
     """
     return skills_item["mu"] * 20 + 100
