@@ -40,6 +40,9 @@ class Reputation(commands.Cog):
     LEADERBOARD_NO_REPS = ERROR + "No reputations in the database."
     LEADERBOARD_DESC = "Users that have received at least 1 reputation: **{}**"
     LEADERBOARD_ROW = "`{}` {} - {} reps"
+    ACTIVE_ROLE_CLEARED = BIN + "Disabled the active role.\n" \
+                                "You can configure the active role by including it at the end of the command."
+    ACTIVE_ROLE_SET = DONE + "Successfully set the active role"
 
     def __init__(self, bot: Red):
         super().__init__()
@@ -50,7 +53,7 @@ class Reputation(commands.Cog):
         # TODO: Make active/abstain roles configurable with command.
         # TODO: Make role/decay threshold configurable with a command, where < 0 resets and == 0 gives error.
         self.config.register_guild(cooldown_period=self.DEFAULT_COOLDOWN, decay_period=self.DEFAULT_DECAY,
-                                   active_role=None, abstain_role=None, decay_threshold=2,
+                                   active_role=None, decay_threshold=2,
                                    role_threshold=10, reputation_channel=None)
         self.config.register_user(abstain=False)
         self.rep_db = DbQueries(self.PATH_DB)
@@ -118,6 +121,19 @@ class Reputation(commands.Cog):
         else:  # Set decay to time provided.
             await self.config.guild(gld).decay_period.set(delta_sec)
             msg = self.DECAY_SET.format(str(delta))
+        await ctx.send(msg)
+
+    @commands.guild_only()
+    @checks.admin_or_permissions(administrator=True)
+    @_reputation_settings.command(name="active")
+    async def set_active_role(self, ctx, role: discord.Role = None):
+        gld = ctx.guild
+        if not role:  # Clear config
+            await self.config.guild(gld).active_role.clear()
+            msg = self.ACTIVE_ROLE_CLEARED
+        else:  # Set active role to role provided
+            await self.config.guild(gld).active_role.set(role.id)
+            msg = self.ACTIVE_ROLE_SET
         await ctx.send(msg)
 
     @commands.guild_only()
