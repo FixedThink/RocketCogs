@@ -47,8 +47,10 @@ class Reputation(commands.Cog):
     COUNT_DESC = "{} has received **{}** reputation{} from **{}** user{}."
     COUNT_NO_REPS = "{} has not received any reputations."
     LEADERBOARD_NO_REPS = ERROR + "No reputations in the database."
-    LEADERBOARD_DESC = "Users that have received at least 1 reputation: **{}**"
-    LEADERBOARD_ROW = "`{}` {} - {} reps"
+    LEADERBOARD_DESC = "Users with at least 1 reputation: **{}**"
+    LEADERBOARD_ROW = "`{:0{}d}` {} • **{}**"
+    OFF = "Disabled"
+    TIME_FMT = "%Y-%m-%d %H:%M:%S.%f"
 
     def __init__(self, bot: Red):
         super().__init__()
@@ -56,7 +58,6 @@ class Reputation(commands.Cog):
         self.FOLDER = str(data_manager.cog_data_path(self))
         self.PATH_DB = self.FOLDER + "/reputation.db"
         self.config = Config.get_conf(self, identifier=5006, force_registration=True)
-        # TODO: Make active/abstain roles configurable with command.
         # TODO: Make role/decay threshold configurable with a command, where < 0 resets and == 0 gives error.
         self.config.register_guild(cooldown_period=self.DEFAULT_COOLDOWN, decay_period=self.DEFAULT_DECAY,
                                    reputation_role=None, role_threshold=10, decay_threshold=2, reputation_channel=None)
@@ -69,8 +70,40 @@ class Reputation(commands.Cog):
     @commands.guild_only()  # Group not restricted to admins so that abstain can be used.
     @commands.group(name="repset", invoke_without_command=True)
     async def _reputation_settings(self, ctx):
-        """Configure the reputation commands"""
-        await ctx.send_help()  # TODO: Add command that shows current config.
+        """Configure the reputation commands
+
+        Note that the `channel` command does not take parameters and will use the current channel when called."""
+        await ctx.send_help()
+
+    @commands.guild_only()
+    @checks.admin_or_permissions(administrator=True)
+    @_reputation_settings.command(name="view")
+    async def view_current_config(self, ctx):
+        """Shows the current configuration of the module"""
+        gld = ctx.guild
+        config_dict = await self.config.guild(gld).all()
+        embed = discord.Embed(title="Current Reputation configuration", colour=discord.Colour.lighter_grey())
+        # Channel ID.
+        chn_id = config_dict["reputation_channel"]
+        embed.add_field(name="Reputation channel", value=f"<#{chn_id}>" if chn_id else self.OFF)
+        # Reputation role.
+        rep_role_id = config_dict["reputation_role"]
+        rep_role_str = (discord.utils.get(gld.roles, id=rep_role_id)).mention if rep_role_id else self.OFF
+        embed.add_field(name="Reputation role", value=rep_role_str)
+        # Reputation cooldown.
+        cooldown = config_dict["cooldown_period"]
+        embed.add_field(name="Cooldown period", value=str(dt.timedelta(seconds=cooldown)) if cooldown else self.OFF)
+        # Reputation threshold.
+        role_min = str(config_dict["role_threshold"])
+        embed.add_field(name="Role threshold", value=role_min if role_min else self.OFF)
+        # Decay threshold.
+        decay_min = str(config_dict["decay_threshold"])
+        embed.add_field(name="Decay threshold", value=decay_min if decay_min else self.OFF)
+        # Reputation decay.
+        decay = config_dict["decay_period"]
+        embed.add_field(name="Decay period", value=str(dt.timedelta(seconds=decay)) if decay else self.OFF)
+        # Send embed.
+        await ctx.send(embed=embed)
 
     @commands.guild_only()
     @_reputation_settings.command(name="abstain")
@@ -166,7 +199,7 @@ class Reputation(commands.Cog):
             await self.config.guild(gld).decay_period.clear()
             msg = self.DECAY_CLEARED
         elif delta_sec == 0:  # Set config to None.
-            await self.config.guild(gld).cooldown_period.set(None)
+            await self.config.guild(gld).decay_period.set(None)
             msg = self.DECAY_REMOVED
         else:  # Set decay to time provided.
             await self.config.guild(gld).decay_period.set(delta_sec)
@@ -214,7 +247,7 @@ class Reputation(commands.Cog):
         if count:
             cs, dcs = self.plural_s(count), self.plural_s(distinct_count)
             embed.description = self.COUNT_DESC.format(user.mention, count, cs, distinct_count, dcs)
-            embed.timestamp = dt.datetime.strptime(dt_str, "%Y-%m-%d %H:%M:%S.%f")
+            embed.timestamp = dt.datetime.strptime(dt_str, self.TIME_FMT)
             embed.set_footer(text="User ID: {} | Last rep given".format(user.id))
         else:
             embed.description = self.COUNT_NO_REPS.format(user.mention)
@@ -230,6 +263,7 @@ class Reputation(commands.Cog):
             await ctx.send(self.LEADERBOARD_NO_REPS)
         else:  # At least one rep given
             repped_count = len(board_list)
+            width = len(str(repped_count))
             desc = self.LEADERBOARD_DESC.format(repped_count)
             # Split the leaderboard into fields with at most 10 rows each.
             field_list = []
@@ -238,7 +272,7 @@ class Reputation(commands.Cog):
                 end = start + 10 if repped_count > (start + 10) else repped_count
 
                 field_name = "{}-{}".format(start + 1, end)
-                field_value = "\n".join((self.LEADERBOARD_ROW.format((i + 1), f"<@{t[0]}>", t[1])
+                field_value = "\n".join((self.LEADERBOARD_ROW.format((i + 1), width, f"<@{t[0]}>", t[1])
                                          for i, t in enumerate(board_list[start:end], start=start)))
                 field_list.append((field_name, field_value))
 
@@ -263,6 +297,8 @@ class Reputation(commands.Cog):
                 await red_menu.menu(ctx, embed_list, red_menu.DEFAULT_CONTROLS, timeout=30.0)
 
     # Utilities
+    # TODO: Add method to check 1 user for role eligibility (and add/remove role based on that). (Test with opt command)
+    # TODO: Add method to give reputation role to all eligible people (excl. abstain), and to remove from the rest.
     @staticmethod
     def plural_s(n: int) -> str:
         """Returns an 's' if n is not 1, otherwise returns an empty string"""

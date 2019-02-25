@@ -18,7 +18,7 @@ class DbQueries:
     SELECT_REP_COUNT = "SELECT COUNT(*) as rep_count, COUNT(DISTINCT from_user) as u_count, " \
                        "MAX(stamp) as most_recent FROM reputations WHERE to_user = ?;"
     SELECT_LEADERBOARD = "SELECT to_user, COUNT(to_user) as rep_count FROM reputations " \
-                         "GROUP BY to_user ORDER BY rep_count, MAX(stamp) desc;"
+                         "GROUP BY to_user ORDER BY rep_count DESC, MAX(stamp) DESC;"
 
     def __init__(self, db_path):
         self.path = db_path
