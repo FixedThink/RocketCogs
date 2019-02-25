@@ -16,12 +16,15 @@ class Reputation(commands.Cog):
     """Give people reputation and reward reputable members"""
     __author__ = "#s#8059, HRAND5#0101"
 
+    # Defaults.
+    DEFAULT_COOLDOWN = 60 * 60 * 24 * 7  # 1 week (cooldown for user A to give user B rep).
+    DEFAULT_DECAY = 60 * 60 * 24 * 7 * 5  # 5 weeks (35 days, time before the reputation role will decay).
+
+    # Notice emote prefixes.
     BIN = ":put_litter_in_its_place: "
     ERROR = ":x: Error: "
     DONE = ":white_check_mark: "
-
-    DEFAULT_COOLDOWN = 60 * 60 * 24 * 7  # 1 week (cooldown for user A to give user B rep).
-    DEFAULT_DECAY = 60 * 60 * 24 * 7 * 5  # 5 weeks (35 days, time before the reputation role will decay).
+    # Notices.
     BAD_CHANNEL = ERROR + "Reputation not added, please use the correct channel for reputations!"
     CHANNEL_CLEARED = BIN + "Cleared the channel configuration. Reputation can now be given in any channel."
     CHANNEL_SET = DONE + "Set the reputation channel to {}."
@@ -35,14 +38,17 @@ class Reputation(commands.Cog):
     REP_COMMENT_HAS_AT = ERROR + "Please do not tag any people in the rep reason!\n" \
                                  "If you must mention someone, use their name instead."
     REP_YOURSELF = ERROR + "Loving yourself is great, but giving yourself reputation is a bit extreme."
+    ROLE_CONFIG_CLEARED = BIN + "Disabled the reputation role.\n" \
+                                "You can configure the active role by including it at the end of the command."
+    ROLE_CONFIG_SET = DONE + "Successfully set the active role."
+    USER_OPT_IN = DONE + "You will now receive a reputation role when eligible."
+    USER_OPT_OUT = BIN + "You will no longer receive a reputation role, even when eligible."
+    # Other constant strings.
     COUNT_DESC = "{} has received **{}** reputation{} from **{}** user{}."
     COUNT_NO_REPS = "{} has not received any reputations."
     LEADERBOARD_NO_REPS = ERROR + "No reputations in the database."
     LEADERBOARD_DESC = "Users that have received at least 1 reputation: **{}**"
     LEADERBOARD_ROW = "`{}` {} - {} reps"
-    ACTIVE_ROLE_CLEARED = BIN + "Disabled the active role.\n" \
-                                "You can configure the active role by including it at the end of the command."
-    ACTIVE_ROLE_SET = DONE + "Successfully set the active role"
 
     def __init__(self, bot: Red):
         super().__init__()
@@ -53,25 +59,57 @@ class Reputation(commands.Cog):
         # TODO: Make active/abstain roles configurable with command.
         # TODO: Make role/decay threshold configurable with a command, where < 0 resets and == 0 gives error.
         self.config.register_guild(cooldown_period=self.DEFAULT_COOLDOWN, decay_period=self.DEFAULT_DECAY,
-                                   active_role=None, decay_threshold=2,
-                                   role_threshold=10, reputation_channel=None)
-        self.config.register_user(abstain=False)
+                                   reputation_role=None, role_threshold=10, decay_threshold=2, reputation_channel=None)
+        self.config.register_user(opt_out=False)
         self.rep_db = DbQueries(self.PATH_DB)
 
     # Events
 
     # Commands
-    @checks.admin_or_permissions(administrator=True)
+    @commands.guild_only()  # Group not restricted to admins so that abstain can be used.
     @commands.group(name="repset", invoke_without_command=True)
     async def _reputation_settings(self, ctx):
         """Configure the reputation commands"""
-        await ctx.send_help()  # TODO: Add codeblock that shows current config.
+        await ctx.send_help()  # TODO: Add command that shows current config.
+
+    @commands.guild_only()
+    @_reputation_settings.command(name="abstain")
+    async def role_opt_out(self, ctx):
+        """Opt in/out to receiving a reputation role
+
+        If you opt out, you will not receive a role even if you are eligible for it."""
+        # TODO: Remove rep role (if applicable) when someone opts out. Check for role eligibility when opting in.
+        current_opt_out = await self.config.user(ctx.author).opt_out()
+        if current_opt_out:
+            to_send = self.USER_OPT_IN
+        else:
+            to_send = self.USER_OPT_OUT
+        # Set opt_out as the inverse of current_opt_out (as this command is a toggle).
+        await self.config.user(ctx.author).opt_out.set(not current_opt_out)
+        await ctx.send(to_send)
+
+    @commands.guild_only()
+    @checks.admin_or_permissions(administrator=True)
+    @_reputation_settings.command(name="role")
+    async def set_reputation_role(self, ctx, role: discord.Role = None):
+        """Configure the reputation role to be given
+
+        If no role is provided, the role functionality will be disabled."""
+        gld = ctx.guild
+        if not role:  # Clear config.
+            await self.config.guild(gld).reputation_role.clear()
+            msg = self.ROLE_CONFIG_CLEARED
+        else:  # Set reputation role to role provided.
+            await self.config.guild(gld).reputation_role.set(role.id)
+            msg = self.ROLE_CONFIG_SET
+        await ctx.send(msg)
 
     @commands.guild_only()
     @checks.admin_or_permissions(administrator=True)
     @_reputation_settings.command(name="channel")
     async def set_rep_channel(self, ctx):
         """Set the reputation channel
+
         The reputation channel will be set to the channel in which this command is executed.
         If this channel is already the reputation channel, the config will be cleared."""
         channel = ctx.channel
@@ -84,12 +122,15 @@ class Reputation(commands.Cog):
             msg = self.CHANNEL_SET.format(channel.mention)
         await ctx.send(msg)
 
+    @commands.guild_only()
     @checks.admin_or_permissions(administrator=True)
     @_reputation_settings.command(name="cooldown")
     async def set_rep_cooldown(self, ctx, days: int, hours: int = 0, minutes: int = 0, seconds: int = 0):
         """Set the reputation cooldown
+
         If a cooldown is active, user A cannot give user B a reputation for the set period after the last rep pair.
-        You must use the days argument. If the time provided equals zero, the config will be set to None.
+
+        You must use the `days` argument. If the time provided equals zero, the cooldown will be disabled.
         If the time provided < 0, then the config will be reset to its default (1 week).
         """
         gld = ctx.guild
@@ -106,9 +147,18 @@ class Reputation(commands.Cog):
             msg = self.COOLDOWN_SET.format(str(delta))
         await ctx.send(msg)
 
+    @commands.guild_only()
     @checks.admin_or_permissions(administrator=True)
     @_reputation_settings.command(name="decay")
     async def set_rep_decay(self, ctx, days: int, hours: int = 0, minutes: int = 0, seconds: int = 0):
+        """Set the decay period
+
+        If the decay is active, a user will lose their role if they haven't received sufficient reputation \
+        during the decay period.
+
+        You must use the `days` argument. If the time provided equals zero, the decay will be disabled.
+        If the time provided < 0, then the config will be reset to its default (5 weeks).
+        """
         gld = ctx.guild
         delta = dt.timedelta(days=days, hours=hours, minutes=minutes, seconds=seconds)
         delta_sec = int(delta.total_seconds())  # Float by default.
@@ -121,19 +171,6 @@ class Reputation(commands.Cog):
         else:  # Set decay to time provided.
             await self.config.guild(gld).decay_period.set(delta_sec)
             msg = self.DECAY_SET.format(str(delta))
-        await ctx.send(msg)
-
-    @commands.guild_only()
-    @checks.admin_or_permissions(administrator=True)
-    @_reputation_settings.command(name="active")
-    async def set_active_role(self, ctx, role: discord.Role = None):
-        gld = ctx.guild
-        if not role:  # Clear config
-            await self.config.guild(gld).active_role.clear()
-            msg = self.ACTIVE_ROLE_CLEARED
-        else:  # Set active role to role provided
-            await self.config.guild(gld).active_role.set(role.id)
-            msg = self.ACTIVE_ROLE_SET
         await ctx.send(msg)
 
     @commands.guild_only()
