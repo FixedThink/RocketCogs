@@ -1,6 +1,6 @@
 {
   "author": ["#s#8059"],
-  "description": "See your competitive ranks for all playlists, see your exact skill rating, mu, sigma, online goal count, and more!",
+  "description": "Check your competitive ranks, exact skill rating, mu, sigma, for all playlists. Additionally, allow users to link their account for easy stat viewing. If configured, the account links may be used to give a user a role according to their highest rank.",
   "install_msg": "Thanks for installing my cog! Keep in mind that in order to use this cog, you must have a valid Psyonix API token, and a valid Steam API token.",
   "short": "Check your Rocket League stats!",
   "name": "LaFusee",

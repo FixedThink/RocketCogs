@@ -2,7 +2,7 @@
 import re
 from collections import OrderedDict
 from json import dumps  # Only used for debug output formatting.
-from typing import Optional
+from typing import List, Optional
 
 # Used by Red.
 import discord
@@ -55,8 +55,8 @@ class LaFusee(commands.Cog):
     R_DETECT_FAIL = ":x: Did not find a role for {tier_str}"
     R_DETECT_TOTAL = "**Total matches:** {match_count} out of 19\n{note}\n\n{rest}"
     # Account registration + rank role update constants.
-    LINKED_UNRANKED = "Your linked account is (currently) unranked in every (eligible) playlist."
-    RANK_ROLE_ADDED = "You received the {r_role} role, which is the highest (eligible) rank of your linked account."
+    LINKED_UNRANKED = "Your linked account is (currently) unranked in every playlist."
+    RANK_ROLE_ADDED = "You received the {r_role} role, which is the highest rank of your linked account."
     RANK_ROLE_REMOVED = "Your rank roles are removed."
     RANK_ROLE_INTACT = "You already seem to have the right rank role ({r_role}), so your roles are not changed."
     RANK_ROLE_UPDATED = "Your rank role is successfully updated to {r_role}."
@@ -67,25 +67,24 @@ class LaFusee(commands.Cog):
     LINK_ROLE_UNRANKED = LINKED_UNRANKED + "\nThus, you cannot receive a rank role."
     LINK_REMOVED = BIN + "Successfully unlinked your {} ID from this account."
     LINK_AND_RANKROLE_REMOVED = LINK_REMOVED + "\nIf you had any rank roles, these were removed as well."  # 1 {}
-    # TODO: Modify string based on rankrole config.
-    LINK_REMOVE_PROMPT = "**Are you sure you want to unlink your account?**\n" \
-                         "Keep in mind that you __don't__ have to unlink your account to update any rank roles.\n" \
+    LINK_REMOVE_ROLE_NOTE = "Keep in mind that you __don't__ have to unlink your account to update any rank roles.\n"
+    LINK_REMOVE_PROMPT = "**Are you sure you want to unlink your account?**\n{}" \
                          "If you are sure, resend this command, but with `yes` at the end, to unlink your {} ID. " \
-                         "No action needed otherwise. {}"
+                         "No action needed otherwise. {}"  # 3× {}.
     # General user link errors.
     USER_NOT_REGISTERED = ERROR + "This user has not registered their account!"
     ALREADY_REGISTERED = ":no_entry_sign: You have already linked your account!\n" \
                          "To change your account, first *unlink* the current account with {}, then link a new one."
     AUTHOR_NOT_REGISTERED = ERROR + "You do not have a registered account."
-    AUTHOR_REGISTER_PROMPT = AUTHOR_NOT_REGISTERED + "\nUse `{}{}` to register one."
+    AUTHOR_REGISTER_PROMPT = AUTHOR_NOT_REGISTERED + "\nUse {} to register one."
     # Platform-tag validation constants.
     ID64_NON_NUMERIC = ERROR + "`/profiles/` links must have a fully numeric ID!"
     SWITCH_UNSUPPORTED = ERROR + "Psyonix does not (yet) support rank queries for the Nintendo Switch.\n" \
                                  "When they do, this command will support it as soon as possible."
     PLATFORM_INVALID = ERROR + "That platform does not exist."
     # Playlist validation constants.
-    PLAYLIST_INVALID = ERROR + "Did not recognise playlist input."
-    PLAYLIST_NOT_PLAYED = ERROR + "This player has not played {plist}!"
+    PLAYLIST_INVALID = ERROR + "Invalid playlist input."
+    PLAYLIST_NOT_PLAYED = ERROR + "{plist} is never played on this account."
     # Assertion error constants.
     ASSERT_INT = "LaFusee: Invalid int for tier: {n} is not an integer between 0 and 19 inclusive."
     ASSERT_ROLE_CONFIG = "LaFusee: The role for tier {n} is not configured."
@@ -112,13 +111,6 @@ class LaFusee(commands.Cog):
         self.json_conv = GetJsonData()
 
     # Configuration commands.
-    @commands.group(name="rl", invoke_without_command=True)
-    async def _rl(self, ctx):
-        """Commands related to Rocket League stats"""
-        # TODO: add platform/tag and stat value explanations to command group.
-        # await ctx.send("Placeholder. There should be a custom embed here soon.")
-        await ctx.send_help()
-
     @checks.admin_or_permissions(administrator=True)
     @commands.group(name="rlset", invoke_without_command=True)
     async def _rl_setup(self, ctx):
@@ -286,6 +278,34 @@ class LaFusee(commands.Cog):
             to_say = self.R_CONF_INVALID_MODE
         await ctx.send(to_say)
 
+    # Main command group.
+    @commands.group(name="rl", invoke_without_command=True)
+    async def _rl(self, ctx):
+        """Commands related to Rocket League stats"""
+        # TODO: add platform/tag and stat value explanations to command group.
+        rankrole_enabled = await self.config.guild(ctx.guild).rankrole_enabled()
+        embed = discord.Embed(title="Rocket League stats: overview", colour=discord.Colour.red())
+        embed.description = "Need help with input? Try {}".format(com(ctx, self.rl_help))
+        # View stats.
+        stat_lines = ("Compact ranks: {}".format(com(ctx, self._lfg_embed)),
+                      "General stats: {}".format(com(ctx, self._rocket_embed)),
+                      "Playlist stats: {}".format(com(ctx, self._plist_embed)))
+        embed.add_field(name="View stats", value="\n".join(stat_lines))
+        # Link account etc.
+        link_lines = ("Link account: {}".format(com(ctx, self.register_tag)),
+                      "Remove link: {}".format(com(ctx, self.de_register_tag)),
+                      "Update rank role: {}".format(com(ctx, self.update_rank_role)))
+        t_slice = None if rankrole_enabled else 1
+        embed.add_field(name="Linking your account", value="\n".join(link_lines[:t_slice]))
+        embed.set_footer(text="Tip: adding 'me' or 'user' behind a stat command name shows your own stats, "
+                              "or lets you view the stats of another Discord user.")
+        await ctx.send(embed=embed)
+
+    @_rl.command(name="howto")
+    async def rl_help(self, ctx):
+        """Show information about input for the ranking commands"""
+        await ctx.send("Placeholder.")  # TODO: Finish.
+
     # Registration commands.
     @_rl.command(name="link")
     async def register_tag(self, ctx, platform, profile_id):
@@ -368,11 +388,12 @@ class LaFusee(commands.Cog):
             to_say = self.AUTHOR_NOT_REGISTERED
         else:
             cap_platform = url_platform.capitalize()
+            rankrole_enabled = await self.config.guild(gld).rankrole_enabled()
             if not confirmation:
-                to_say = self.LINK_REMOVE_PROMPT.format(cap_platform, author.mention)
+                role_note = self.LINK_REMOVE_ROLE_NOTE if rankrole_enabled else ""
+                to_say = self.LINK_REMOVE_PROMPT.format(role_note, cap_platform, author.mention)
             else:
                 await self.link_db.delete_user(author_id)
-                rankrole_enabled = await self.config.guild(gld).rankrole_enabled()
                 if rankrole_enabled is False:
                     to_say = self.LINK_REMOVED.format(cap_platform)
                 else:
@@ -387,7 +408,7 @@ class LaFusee(commands.Cog):
         """Show a player's ranks in LFG embed format"""
         url_platform, url_id, notice = await self.platform_id_bundle(platform, profile_id)
         if not notice:
-            response, notice = await self.psy_api.player_skills(url_platform, url_id)
+            response, notice = await self.psy_api.player_skills(url_platform, url_id, ensure_played=True)
             if not notice:
                 embeds = self.make_lfg_embed(response, url_platform)
                 await red_menu.menu(ctx, embeds, red_menu.DEFAULT_CONTROLS, timeout=30.0)
@@ -404,11 +425,11 @@ class LaFusee(commands.Cog):
         url_platform, url_id = await self.link_db.select_user(user.id)
         if None in (url_platform, url_id):  # User is not properly registered.
             if user == ctx.author:
-                notice = self.AUTHOR_REGISTER_PROMPT.format(ctx.prefix, self.register_tag.qualified_name)
+                notice = self.AUTHOR_REGISTER_PROMPT.format(com(ctx, self.register_tag.qualified_name))
             else:
                 notice = self.USER_NOT_REGISTERED
         else:  # Valid registration.
-            response, notice = await self.psy_api.player_skills(url_platform, url_id)
+            response, notice = await self.psy_api.player_skills(url_platform, url_id, ensure_played=True)
             if not notice:
                 embeds = self.make_lfg_embed(response, url_platform, user)
                 await red_menu.menu(ctx, embeds, red_menu.DEFAULT_CONTROLS, timeout=30.0)
@@ -420,7 +441,7 @@ class LaFusee(commands.Cog):
         """Show a player's stats in standard embed format"""
         url_platform, url_id, notice = await self.platform_id_bundle(platform, profile_id)
         if not notice:
-            response, notice = await self.psy_api.player_skills(url_platform, url_id)
+            response, notice = await self.psy_api.player_skills(url_platform, url_id, ensure_played=True)
             if not notice:
                 gas_od, notice = await self.psy_api.player_stat_values(url_platform, url_id)
                 if not notice:
@@ -438,11 +459,11 @@ class LaFusee(commands.Cog):
         url_platform, url_id = await self.link_db.select_user(user.id)
         if None in (url_platform, url_id):  # User is not properly registered.
             if user == ctx.author:
-                notice = self.AUTHOR_REGISTER_PROMPT.format(ctx.prefix, self.register_tag.qualified_name)
+                notice = self.AUTHOR_REGISTER_PROMPT.format(com(ctx, self.register_tag.qualified_name))
             else:
                 notice = self.USER_NOT_REGISTERED
         else:  # Valid registration.
-            response, notice = await self.psy_api.player_skills(url_platform, url_id)
+            response, notice = await self.psy_api.player_skills(url_platform, url_id, ensure_played=True)
             if not notice:
                 gas_od, notice = await self.psy_api.player_stat_values(url_platform, url_id)
                 if not notice:
@@ -460,7 +481,7 @@ class LaFusee(commands.Cog):
         else:  # Get platform / ID.
             url_platform, url_id, notice = await self.platform_id_bundle(platform, profile_id)
             if not notice:  # Get player skills.
-                response, notice = await self.psy_api.player_skills(url_platform, url_id)
+                response, notice = await self.psy_api.player_skills(url_platform, url_id, ensure_played=True)
                 if not notice:
                     content, embed = self.make_plist_embed(response, list_id, url_platform)
                     await ctx.send(content, embed=embed)
@@ -482,11 +503,11 @@ class LaFusee(commands.Cog):
             url_platform, url_id = await self.link_db.select_user(user.id)
             if None in (url_platform, url_id):  # User is not properly registered.
                 if user == ctx.author:
-                    notice = self.AUTHOR_REGISTER_PROMPT.format(ctx.prefix, self.register_tag.qualified_name)
+                    notice = self.AUTHOR_REGISTER_PROMPT.format(com(ctx, self.register_tag.qualified_name))
                 else:
                     notice = self.USER_NOT_REGISTERED
             else:  # Valid registration.
-                response, notice = await self.psy_api.player_skills(url_platform, url_id)
+                response, notice = await self.psy_api.player_skills(url_platform, url_id, ensure_played=True)
                 if not notice:
                     content, embed = self.make_plist_embed(response, list_id, url_platform)
                     await ctx.send(content, embed=embed)
@@ -641,9 +662,10 @@ class LaFusee(commands.Cog):
             id_out = False
         else:  # Valid platform.
             if platform_out == "steam":
-                # TODO: convert [U:1:{n}] to just {n}, to support ID3 in their original format.
                 if id_in.lstrip("-").isdigit():
                     id_out = self.int_to_steam_id64(int(id_in))
+                elif re.match(r"^\[U:1:\d{1,10}\]$", id_in):  # Convert value inside steamID3 to ID64.
+                    id_out = self.int_to_steam_id64(int(id_in.lstrip("[U:1:").rstrip("]")))
                 else:  # Do regex checks for /id/ and /profiles/.
                     re_split_a = re.split(r'/profiles/', id_in, maxsplit=1)
                     re_split_b = re.split(r'/id/', id_in, maxsplit=1)
@@ -706,12 +728,11 @@ class LaFusee(commands.Cog):
             normal_lists.append(v) if k < 20 else special_lists.append(v)
         return "\n".join(normal_lists), "\n".join(special_lists)
 
-    def make_lfg_embed(self, response: dict, url_platform: str, user: discord.Member = None) -> list:
+    def make_lfg_embed(self, response: dict, url_platform: str, user: discord.Member = None) -> List[discord.Embed]:
         """Make the embed for the LFG commands"""
         player_name = response["user_name"]
         player_skills = response.get("player_skills")  # Note: value is a list!
-        if not player_skills:  # Debug exception.
-            raise Exception("lfg -> No player skills")
+        assert player_skills, "lfg -> No player skills! Check the presence of player skills first."
         best_tier, best_list_id, played_lists = best_playlist(player_skills)
         unplayed_lists = {n for n in self.PLAYLIST_IDS if n not in played_lists}
         # Create rows for each playlist.
@@ -736,8 +757,7 @@ class LaFusee(commands.Cog):
         """Make the embed for the general stat commands"""
         player_name = response["user_name"]
         player_skills = response.get("player_skills")  # Note: value is a list!
-        if not player_skills:  # Debug exception.
-            raise Exception("rocket -> No player skills")
+        assert player_skills, "rocket -> No player skills! Check the presence of player skills first."
         best_tier, best_list_id, played_lists = best_playlist(player_skills)
         unplayed_lists = {n for n in self.PLAYLIST_IDS if n not in played_lists}
         # Create rows for each playlist.
@@ -772,8 +792,7 @@ class LaFusee(commands.Cog):
 
         Returns message content (if applicable) and an embed (if there is one)."""
         player_skills = response.get("player_skills")
-        if not player_skills:
-            raise Exception("plist -> no player skills")
+        assert player_skills, "plist -> No player skills! Check the presence of player skills first."
         list_name = self.json_conv.get_playlist_name(list_id, mode=3)
         p_dict = next((d for d in player_skills if d["playlist"] == list_id), None)  # No fixed order.
         if not p_dict:

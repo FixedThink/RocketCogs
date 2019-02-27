@@ -108,7 +108,7 @@ class Reputation(commands.Cog):
     @commands.guild_only()
     @_reputation_settings.command(name="abstain")
     async def role_opt_out(self, ctx):
-        """Opt in/out to receiving a reputation role
+        """Opt in/out of receiving a reputation role
 
         If you opt out, you will not receive a role even if you are eligible for it."""
         # TODO: Remove rep role (if applicable) when someone opts out. Check for role eligibility when opting in.
@@ -141,9 +141,8 @@ class Reputation(commands.Cog):
     @checks.admin_or_permissions(administrator=True)
     @_reputation_settings.command(name="channel")
     async def set_rep_channel(self, ctx):
-        """Set the reputation channel
+        """Set the current channel as the reputation channel
 
-        The reputation channel will be set to the channel in which this command is executed.
         If this channel is already the reputation channel, the config will be cleared."""
         channel = ctx.channel
         gld = ctx.guild

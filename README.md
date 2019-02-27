@@ -8,27 +8,28 @@ which is a bot using the latest version of discord.py.
 
 ## LaFusee
 
-La Fusée (French for "The Rocket") is the project name for the cog that contains various commands related to Rocket League user stats. 
-The cog's core functions are similar to RankCog and SetProfile cogs (both on V2 of RedBot), used on the 
-Rocket League Coaching Discord. However, it is rewritten from scratch, and unified in order to make additional features possible.
+La Fusée (French for *The Rocket*) is the project name for the cog that contains various commands related to Rocket League user stats. 
+The cog is based on two RedBot V2 modules used on the [Rocket League Coaching Discord](https://www.rlcd.gg/) (RankCog and SetProfile). 
+However, it is rewritten from scratch, and unified in order to make additional features possible.
 
-This cog allows users to check their ranks (or those of others), by either specifying someone's platform and ID. 
+This cog allows users to check their ranks (or those of others), by specifying someone's platform and ID. 
 Additionally, users can register their gamer ID (Steam, PlayStation 4, or Xbox), and use that to get their Rocket League stats.
 
 #### Stat checking
-Various ways of displaying one's stats are planned. As the cog is currently in development, only one of them is ready thus far.
 
-- **lfg** - This command displays a player's current rank (tier, division, and rating) in each playlist using a 
+- **lfg** – This command displays a player's current rank (tier, division, and rating) in each playlist using a 
 compact embed. This embed is split in two views; one view for the "normal" playlists, and one for the 
 "special" playlists such as Rumble. A user can switch between these two views by reactions added beneath the embed.
 
-Other planned commands include:
+- **stats** – Displays someone's ranking performance, as well as general online stats (goals, assists, etc). 
+Also shows someone's progress for Season Rewards.
 
-- **stats [playlist]** - if no playlist is provided, display someone's ranking performance, as well as general online 
-stats (goals, assists, etc). If a playlist is provided, it displays more specific stats of the player in that playlist, 
-such as their amount of matches played. *[At the moment, only the no-playlist part is added]*
+- **lstats** or **list** – Displays more specific stats of a player in a provided playlist.
+These stats include the amount of matches played, values that are not shown by any other trackers (mu, sigma), and more.
 
-- *more to follow*
+Each of these commands have a subcommand **user** (alias **me**) that, instead of platform and ID input, 
+allows a user to show stats via a user mention (given that the user has linked their account). 
+If no user is mentioned, this will default to the stats of the message author. 
 
 
 #### Rank roles
@@ -36,7 +37,8 @@ In addition to the account registration, this cog has a built-in rank role featu
 The rank role functionality allows a guild to automatically assign a rank role to its members when they register their account. 
 To set this up, the guild staff can either manually create the roles and make the bot automatically detect them, 
 or let the bot make the roles needed for them.
-It is also possible make special playlists (e.g. rumble) not count for a role (by default they do count).
+
+It is also possible to ignore special playlists (e.g. rumble) when determining the highest role, but this is turned off by default.
 
 
 ## Reputation

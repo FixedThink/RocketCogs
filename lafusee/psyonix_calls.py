@@ -31,6 +31,8 @@ class PsyonixCalls:
                     "This means that the API might be down. Try again later."
     UNKNOWN_STATUS_ERROR = ERROR + "Something went wrong whilst querying the Psyonix API.\n" \
                                    "See the console for the query in question. `(Uncaught status: {})`"
+    # Other errors.
+    NO_MATCHES = ERROR + "This account has purchased Rocket League, but has no online matches on record!"
 
     def __init__(self, cog):
         # Load config in order to always have an updated token.
@@ -82,8 +84,11 @@ class PsyonixCalls:
                         print(request_url)
         return to_return, error
 
-    async def player_skills(self, platform: str, valid_id) -> Tuple[Optional[dict], Optional[str]]:
+    async def player_skills(self, platform: str, valid_id,
+                            ensure_played: bool = False) -> Tuple[Optional[dict], Optional[str]]:
         """Composes the PlayerSkills query call, and returns its response
+
+        if ensure_played is True, there will be a notice if the player_skills value is an empty list.
 
         Structure of a normal API response:
         {user_name: str, player_skills: [list of playlist_dict], user_id: str, season_rewards: {wins: int, level: int}}
@@ -96,6 +101,8 @@ class PsyonixCalls:
         """
         request_url = self.API_RANK.format(p=platform, uid=valid_id)
         to_return, notice = await self.call_psyonix_api(request_url)
+        if ensure_played and to_return and not to_return.get("player_skills"):
+            notice = self.NO_MATCHES
         return to_return, notice
 
     async def player_titles(self, platform: str, valid_id) -> Tuple[Optional[dict], Optional[str]]:
