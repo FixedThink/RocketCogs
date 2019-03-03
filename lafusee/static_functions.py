@@ -12,7 +12,7 @@ def _use_plist(check_d: dict, allow_special: bool = True) -> bool:
 
 
 def best_playlist(player_skills: list, allow_special: bool = True) -> Tuple[int, Optional[int], set]:
-    """    # TODO: review whether first int in type hint is optional.
+    """
     :param player_skills: A list with a player's skills (extracted from the skills response dict).
     :param allow_special: Whether to count special playlists or not
     :return: A tuple containing the player's best rank, playlist, and what lists they've played in.

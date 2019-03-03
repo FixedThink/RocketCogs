@@ -81,10 +81,21 @@ class LaFusee(commands.Cog):
     ID64_NON_NUMERIC = ERROR + "`/profiles/` links must have a fully numeric ID!"
     SWITCH_UNSUPPORTED = ERROR + "Psyonix does not (yet) support rank queries for the Nintendo Switch.\n" \
                                  "When they do, this command will support it as soon as possible."
-    PLATFORM_INVALID = ERROR + "That platform does not exist."
+    PLATFORM_EXAMPLES = "Try one of these: PC, PS4, XBOX"
+    PLATFORM_INVALID = ERROR + "That platform does not exist.\n" + PLATFORM_EXAMPLES
     # Playlist validation constants.
     PLAYLIST_INVALID = ERROR + "Invalid playlist input."
     PLAYLIST_NOT_PLAYED = ERROR + "{plist} is never played on this account."
+    # Help message constants.
+    GROUP_FOOTER = "Tip: adding 'me' or 'user' behind a stat command name shows your own stats, " \
+                   "or lets you view the stats of another Discord user."
+    PLAYLIST_INPUT = "Playlists are accepted in multiple formats, including:\n" \
+                     "`casual` • `duel` • `doubles` • `solostandard` • `hoops` • `rumble` • `dropshot` • `snowday\n" \
+                     "1s` • `2s` • `ss` • `3s` • `hs` • `rb` • `ds` • `sd`"
+    PROFILE_INPUT = "**PC** – Use your vanity ID, the long number, or just link to your profile.\n" \
+                    "**PS4** – Use your player tag (may be case-sensitive).\n" \
+                    "**XBOX** – Use your player tag. If it has spaces, surround it with quotes."
+    INFO_FOOTER = "If any input is invalid though it should be valid, please reach out to the developer!"
     # Assertion error constants.
     ASSERT_INT = "LaFusee: Invalid int for tier: {n} is not an integer between 0 and 19 inclusive."
     ASSERT_ROLE_CONFIG = "LaFusee: The role for tier {n} is not configured."
@@ -95,6 +106,7 @@ class LaFusee(commands.Cog):
     E_ROW_NO_MATCHES = "`{:\u2800<{}}`\u2002*No matches played*"
     # Other constants.
     STEAM_PROFILE_URL = "https://steamcommunity.com/profiles/{}"
+    STEAM_APP_URL = "steam://url/SteamIDPage/{}"
 
     def __init__(self, bot: Red):
         super().__init__()
@@ -282,9 +294,8 @@ class LaFusee(commands.Cog):
     @commands.group(name="rl", invoke_without_command=True)
     async def _rl(self, ctx):
         """Commands related to Rocket League stats"""
-        # TODO: add platform/tag and stat value explanations to command group.
         rankrole_enabled = await self.config.guild(ctx.guild).rankrole_enabled()
-        embed = discord.Embed(title="Rocket League stats: overview", colour=discord.Colour.red())
+        embed = discord.Embed(title="Rocket League stats: Overview", colour=discord.Colour.red())
         embed.description = "Need help with input? Try {}".format(com(ctx, self.rl_help))
         # View stats.
         stat_lines = ("Compact ranks: {}".format(com(ctx, self._lfg_embed)),
@@ -295,16 +306,20 @@ class LaFusee(commands.Cog):
         link_lines = ("Link account: {}".format(com(ctx, self.register_tag)),
                       "Remove link: {}".format(com(ctx, self.de_register_tag)),
                       "Update rank role: {}".format(com(ctx, self.update_rank_role)))
-        t_slice = None if rankrole_enabled else 1
+        t_slice = None if rankrole_enabled else 2
         embed.add_field(name="Linking your account", value="\n".join(link_lines[:t_slice]))
-        embed.set_footer(text="Tip: adding 'me' or 'user' behind a stat command name shows your own stats, "
-                              "or lets you view the stats of another Discord user.")
+        embed.set_footer(text=self.GROUP_FOOTER)
         await ctx.send(embed=embed)
 
     @_rl.command(name="howto")
     async def rl_help(self, ctx):
         """Show information about input for the ranking commands"""
-        await ctx.send("Placeholder.")  # TODO: Finish.
+        embed = discord.Embed(title="Rocket League stats: Input help", colour=discord.Colour.red())
+        embed.add_field(name="Platform input", value=self.PLATFORM_EXAMPLES)
+        embed.add_field(name="Profile input", value=self.PROFILE_INPUT)
+        embed.add_field(name="Playlist input", value=self.PLAYLIST_INPUT)
+        embed.set_footer(text=self.INFO_FOOTER)
+        await ctx.send(embed=embed)
 
     # Registration commands.
     @_rl.command(name="link")
@@ -467,7 +482,7 @@ class LaFusee(commands.Cog):
             if not notice:
                 gas_od, notice = await self.psy_api.player_stat_values(url_platform, url_id)
                 if not notice:
-                    await ctx.send(embed=self.make_rocket_embed(response, gas_od, url_platform))
+                    await ctx.send(embed=self.make_rocket_embed(response, gas_od, url_platform, user))
         if notice:
             await ctx.send(notice)
 
@@ -509,7 +524,7 @@ class LaFusee(commands.Cog):
             else:  # Valid registration.
                 response, notice = await self.psy_api.player_skills(url_platform, url_id, ensure_played=True)
                 if not notice:
-                    content, embed = self.make_plist_embed(response, list_id, url_platform)
+                    content, embed = self.make_plist_embed(response, list_id, url_platform, user)
                     await ctx.send(content, embed=embed)
         if notice:
             await ctx.send(notice)

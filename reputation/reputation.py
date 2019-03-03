@@ -1,5 +1,6 @@
 # Default Library.
 import datetime as dt
+from asyncio import sleep
 
 # Used by Red.
 import discord
@@ -34,6 +35,7 @@ class Reputation(commands.Cog):
     DECAY_CLEARED = BIN + "Set the reputation decay back to the default settings."
     DECAY_REMOVED = BIN + "Disabled reputation decay."
     DECAY_SET = DONE + "Set the reputation decay to {}"
+    REP_BAD_INPUT = ERROR + "Your input was not fully valid! Note that username is case-sensitive."
     REP_NOT_COOL = ERROR + "You have given that user a reputation too recently!"
     REP_COMMENT_HAS_AT = ERROR + "Please do not tag any people in the rep reason!\n" \
                                  "If you must mention someone, use their name instead."
@@ -209,6 +211,7 @@ class Reputation(commands.Cog):
     @commands.command()
     async def rep(self, ctx, user: discord.Member, *, comment: str = None):
         """Give someone reputation
+
         You may add a comment, but this is not necessary."""
         # TODO: Possibly restrict length of rep message.
         aut = ctx.author
@@ -234,6 +237,24 @@ class Reputation(commands.Cog):
                 notice = self.BAD_CHANNEL
         if notice:  # Delete after some seconds as to not clog the channel.
             await ctx.send(notice, delete_after=20)
+            await sleep(20)
+            try:  # Delete the original message at the same time.
+                await ctx.message.delete()
+            except discord.Forbidden:
+                print("rep -> I lack manage messages permissions!")
+
+    # TODO: Uncomment the code once the newest version of RedBot is there (probably 3.0.3).
+    # @rep.error
+    # async def rep_error(self, ctx, error):
+    #     """Ensure that input errors cause message deletions"""
+    #     if isinstance(error, commands.BadArgument):
+    #         await ctx.send(self.REP_BAD_INPUT, delete_after=20)
+    #     # Delete the original message.
+    #     await sleep(20)
+    #     try:
+    #         await ctx.message.delete()
+    #     except discord.Forbidden:
+    #         print("rep_error -> I lack manage messages permissions!")
 
     @commands.command(name="reps", aliases=["rep_count"])
     async def rep_count(self, ctx, user: discord.Member = None):
