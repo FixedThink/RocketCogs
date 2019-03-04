@@ -6,6 +6,7 @@ from typing import List, Optional, Tuple
 # Requirements.
 import aiosqlite
 
+# TODO: some todo about typehints that #s will take care of.
 
 class DbQueries:
     """Query the reputation database"""
@@ -19,6 +20,7 @@ class DbQueries:
                        "MAX(stamp) as most_recent FROM reputations WHERE to_user = ?;"
     SELECT_LEADERBOARD = "SELECT to_user, COUNT(to_user) as rep_count FROM reputations " \
                          "GROUP BY to_user ORDER BY rep_count DESC, MAX(stamp) DESC;"
+    GET_RECENT_REPS = "SELECT COUNT(*) from reputations WHERE from_user = ? AND stamp > ?"
 
     def __init__(self, db_path):
         self.path = db_path
@@ -82,6 +84,16 @@ class DbQueries:
         """
         leaderboard = await self.exec_sql(self.SELECT_LEADERBOARD)
         return leaderboard if leaderboard else None
+
+    async def recent_reps(self, user_id: int, decay: dt.datetime) -> List[tuple]:
+        """
+        :param user_id: The userID of the user whose recent reps should be checked.
+        :param decay: 
+        :return:
+        """
+        recent_reps = await self.exec_sql(self.GET_RECENT_REPS, params=[user_id, decay])
+
+        return recent_reps[0][0]
 
     # Utilities.
     async def exec_sql(self, query, params=None, commit=False) -> tuple:
