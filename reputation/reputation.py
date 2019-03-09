@@ -317,7 +317,35 @@ class Reputation(commands.Cog):
                 await red_menu.menu(ctx, embed_list, red_menu.DEFAULT_CONTROLS, timeout=30.0)
 
     # Utilities
-    # TODO: Add method to check 1 user for role eligibility (and add/remove role based on that). (Test with opt command)
+    async def check_role_eligibility(self, user: discord.Member, gld: discord.Guild):
+        decay_datetime = dt.datetime.now() - dt.timedelta(seconds=await self.config.guild(gld).decay_period())
+        threshold = await self.config.guild(gld).decay_threshold()
+        user_roles = user.roles
+        user_total_reps = await self.rep_db.user_rep_count(user.id)
+        user_has_role = False
+        role_threshold = await self.config.guild(gld).role_threshold()
+        user_opt_out = await self.config.user(user).opt_out()
+
+        if not user_opt_out:
+            rep_role_id = await self.config.guild(gld).reputation_role()
+            rep_role = discord.utils.get(gld.roles, id=rep_role_id)
+            recent_reps = await self.rep_db.recent_reps(user_id=user.id, decay=decay_datetime)
+
+            for role in user_roles:
+                if role == rep_role:
+                    user_has_role = True
+
+            if user_total_reps[0] >= role_threshold:
+                if recent_reps >= threshold and not user_has_role:
+                    await user.add_roles(rep_role)
+
+                elif recent_reps < threshold and user_has_role:
+                    await user.remove_roles(rep_role)
+            else:
+                await user.remove_roles(rep_role)
+        else:
+            return None
+
     # TODO: Add method to give reputation role to all eligible people (excl. abstain), and to remove from the rest.
     @staticmethod
     def plural_s(n: int) -> str:

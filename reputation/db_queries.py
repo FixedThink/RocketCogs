@@ -6,8 +6,8 @@ from typing import List, Optional, Tuple
 # Requirements.
 import aiosqlite
 
-# TODO: some todo about typehints that #s will take care of.
 
+# TODO: some todo about typehints that #s will take care of.
 class DbQueries:
     """Query the reputation database"""
     CREATE_TABLE = "CREATE TABLE `reputations` (`from_user` INTEGER, `from_name` TEXT, `to_user` INTEGER, " \
@@ -20,7 +20,7 @@ class DbQueries:
                        "MAX(stamp) as most_recent FROM reputations WHERE to_user = ?;"
     SELECT_LEADERBOARD = "SELECT to_user, COUNT(to_user) as rep_count FROM reputations " \
                          "GROUP BY to_user ORDER BY rep_count DESC, MAX(stamp) DESC;"
-    GET_RECENT_REPS = "SELECT COUNT(*) from reputations WHERE from_user = ? AND stamp > ?"
+    GET_RECENT_REPS = "SELECT COUNT(*) from reputations WHERE to_user = ? AND stamp > ?"
 
     def __init__(self, db_path):
         self.path = db_path
@@ -92,7 +92,7 @@ class DbQueries:
         :return:
         """
         recent_reps = await self.exec_sql(self.GET_RECENT_REPS, params=[user_id, decay])
-
+        print(recent_reps)
         return recent_reps[0][0]
 
     # Utilities.
