@@ -67,14 +67,15 @@ class DbQueries:
             await self.exec_sql(self.INSERT_REP, params=params, commit=True)
         return can_insert
 
-    async def user_rep_count(self, user_id: int) -> Optional[Tuple[int, int, str]]:
+    async def user_rep_count(self, user_id: int) -> Tuple[int, int, Optional[str]]:
         """
         :param user_id: The userID of the user whose reputation count should be checked.
         :return: The tuple with the amount of reputations received, given by distinct count of users,
                  and the datetime string of the last reputation given.
         """
         resp = await self.exec_sql(self.SELECT_REP_COUNT, params=[user_id])
-        return resp[0] if resp else None
+        assert resp, "No response from user_rep_count!"  # Should always return a response.
+        return resp[0]
 
     async def rep_leaderboard(self) -> Optional[List[Tuple[int, int]]]:
         """
@@ -85,18 +86,18 @@ class DbQueries:
         leaderboard = await self.exec_sql(self.SELECT_LEADERBOARD)
         return leaderboard if leaderboard else None
 
-    async def recent_reps(self, user_id: int, decay: dt.datetime) -> List[tuple]:
+    async def recent_reps(self, user_id: int, start_time: dt.datetime) -> int:
         """
         :param user_id: The userID of the user whose recent reps should be checked.
-        :param decay: 
-        :return:
+        :param start_time: The timestamp after which all reputations should be counted
+        :return: An integer with the amount of reputations received by the user after start_time
         """
-        recent_reps = await self.exec_sql(self.GET_RECENT_REPS, params=[user_id, decay])
-        print(recent_reps)
-        return recent_reps[0][0]
+        resp = await self.exec_sql(self.GET_RECENT_REPS, params=[user_id, start_time])
+        assert resp, "No response from recent_reps!"
+        return resp[0][0]
 
     # Utilities.
-    async def exec_sql(self, query, params=None, commit=False) -> tuple:
+    async def exec_sql(self, query, params=None, commit=False) -> list:
         """Make an asynchronous query to the reputation database"""
         async with aiosqlite.connect(self.path) as db:
             async with db.execute(query, parameters=params) as cursor:

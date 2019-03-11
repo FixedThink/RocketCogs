@@ -1,12 +1,13 @@
 # Default Library.
 import datetime as dt
 from asyncio import sleep
+from typing import Optional
 
 # Used by Red.
 import discord
-from redbot.core import commands
-from redbot.core import checks, Config, data_manager
-from redbot.core.bot import Red
+from redbot.core import commands, checks, Config, data_manager
+from redbot.core.commands.context import Context  # For type hints.
+from redbot.core.bot import Red  # For type hints.
 import redbot.core.utils.menus as red_menu
 
 # Local files.
@@ -71,7 +72,7 @@ class Reputation(commands.Cog):
     # Commands
     @commands.guild_only()  # Group not restricted to admins so that abstain can be used.
     @commands.group(name="repset", invoke_without_command=True)
-    async def _reputation_settings(self, ctx):
+    async def _reputation_settings(self, ctx: Context):
         """Configure the reputation commands
 
         Note that the `channel` command does not take parameters and will use the current channel when called."""
@@ -80,7 +81,7 @@ class Reputation(commands.Cog):
     @commands.guild_only()
     @checks.admin_or_permissions(administrator=True)
     @_reputation_settings.command(name="view")
-    async def view_current_config(self, ctx):
+    async def view_current_config(self, ctx: Context):
         """Shows the current configuration of the module"""
         gld = ctx.guild
         config_dict = await self.config.guild(gld).all()
@@ -89,8 +90,8 @@ class Reputation(commands.Cog):
         chn_id = config_dict["reputation_channel"]
         embed.add_field(name="Reputation channel", value=f"<#{chn_id}>" if chn_id else self.OFF)
         # Reputation role.
-        rep_role_id = config_dict["reputation_role"]
-        rep_role_str = (discord.utils.get(gld.roles, id=rep_role_id)).mention if rep_role_id else self.OFF
+        rep_role_obj = await self.get_reputation_role_obj(gld)
+        rep_role_str = rep_role_obj.mention if rep_role_obj else self.OFF
         embed.add_field(name="Reputation role", value=rep_role_str)
         # Reputation cooldown.
         cooldown = config_dict["cooldown_period"]
@@ -109,24 +110,28 @@ class Reputation(commands.Cog):
 
     @commands.guild_only()
     @_reputation_settings.command(name="abstain")
-    async def role_opt_out(self, ctx):
+    async def role_opt_out(self, ctx: Context):
         """Opt in/out of receiving a reputation role
 
         If you opt out, you will not receive a role even if you are eligible for it."""
-        # TODO: Remove rep role (if applicable) when someone opts out. Check for role eligibility when opting in.
-        current_opt_out = await self.config.user(ctx.author).opt_out()
+        aut = ctx.author
+        current_opt_out = await self.config.user(aut).opt_out()
+        # Set opt_out as the inverse of current_opt_out (as this command is a toggle).
+        await self.config.user(aut).opt_out.set(not current_opt_out)
         if current_opt_out:
             to_send = self.USER_OPT_IN
+            await self.user_role_check(ctx)  # TODO: modify the opt-in message if role is granted.
         else:
             to_send = self.USER_OPT_OUT
-        # Set opt_out as the inverse of current_opt_out (as this command is a toggle).
-        await self.config.user(ctx.author).opt_out.set(not current_opt_out)
+            rep_role_obj = await self.get_reputation_role_obj(ctx.guild)
+            if rep_role_obj and rep_role_obj in aut.roles:
+                await aut.remove_roles(rep_role_obj)
         await ctx.send(to_send)
 
     @commands.guild_only()
     @checks.admin_or_permissions(administrator=True)
     @_reputation_settings.command(name="role")
-    async def set_reputation_role(self, ctx, role: discord.Role = None):
+    async def set_reputation_role(self, ctx: Context, role: discord.Role = None):
         """Configure the reputation role to be given
 
         If no role is provided, the role functionality will be disabled."""
@@ -142,7 +147,7 @@ class Reputation(commands.Cog):
     @commands.guild_only()
     @checks.admin_or_permissions(administrator=True)
     @_reputation_settings.command(name="channel")
-    async def set_rep_channel(self, ctx):
+    async def set_rep_channel(self, ctx: Context):
         """Set the current channel as the reputation channel
 
         If this channel is already the reputation channel, the config will be cleared."""
@@ -159,7 +164,7 @@ class Reputation(commands.Cog):
     @commands.guild_only()
     @checks.admin_or_permissions(administrator=True)
     @_reputation_settings.command(name="cooldown")
-    async def set_rep_cooldown(self, ctx, days: int, hours: int = 0, minutes: int = 0, seconds: int = 0):
+    async def set_rep_cooldown(self, ctx: Context, days: int, hours: int = 0, minutes: int = 0, seconds: int = 0):
         """Set the reputation cooldown
 
         If a cooldown is active, user A cannot give user B a reputation for the set period after the last rep pair.
@@ -184,7 +189,7 @@ class Reputation(commands.Cog):
     @commands.guild_only()
     @checks.admin_or_permissions(administrator=True)
     @_reputation_settings.command(name="decay")
-    async def set_rep_decay(self, ctx, days: int, hours: int = 0, minutes: int = 0, seconds: int = 0):
+    async def set_rep_decay(self, ctx: Context, days: int, hours: int = 0, minutes: int = 0, seconds: int = 0):
         """Set the decay period
 
         If the decay is active, a user will lose their role if they haven't received sufficient reputation \
@@ -209,7 +214,7 @@ class Reputation(commands.Cog):
 
     @commands.guild_only()
     @commands.command()
-    async def rep(self, ctx, user: discord.Member, *, comment: str = None):
+    async def rep(self, ctx: Context, user: discord.Member, *, comment: str = None):
         """Give someone reputation
 
         You may add a comment, but this is not necessary."""
@@ -230,6 +235,7 @@ class Reputation(commands.Cog):
                                                         ctx.message.created_at, rep_msg, cooldown_secs)
                 if is_added:
                     notice = None
+                    await self.user_role_check(ctx, user=user)
                     await ctx.tick()
                 else:
                     notice = self.REP_NOT_COOL
@@ -257,7 +263,7 @@ class Reputation(commands.Cog):
     #         print("rep_error -> I lack manage messages permissions!")
 
     @commands.command(name="reps", aliases=["rep_count"])
-    async def rep_count(self, ctx, user: discord.Member = None):
+    async def rep_count(self, ctx: Context, user: discord.Member = None):
         """See the amount of reps given to a user"""
         if user is None:
             user = ctx.author
@@ -274,7 +280,7 @@ class Reputation(commands.Cog):
         await ctx.send(embed=embed)
 
     @commands.command(name="leaderboard", aliases=["lboard"])
-    async def rep_leaderboard(self, ctx):
+    async def rep_leaderboard(self, ctx: Context):
         """See the reputation leaderboard
 
         Ties are broken based on who received a reputation the most recently."""
@@ -317,36 +323,56 @@ class Reputation(commands.Cog):
                 await red_menu.menu(ctx, embed_list, red_menu.DEFAULT_CONTROLS, timeout=30.0)
 
     # Utilities
-    async def check_role_eligibility(self, user: discord.Member, gld: discord.Guild):
-        decay_datetime = dt.datetime.now() - dt.timedelta(seconds=await self.config.guild(gld).decay_period())
-        threshold = await self.config.guild(gld).decay_threshold()
-        user_roles = user.roles
-        user_total_reps = await self.rep_db.user_rep_count(user.id)
-        user_has_role = False
-        role_threshold = await self.config.guild(gld).role_threshold()
+    async def user_role_check(self, ctx: Context, user: discord.Member = None) -> None:
+        """
+        :param ctx: The Context object of the message that requests the check
+        :param user: (Optional) The user to check. If not provided, the author of the command will be checked instead.
+        :return: None
+
+        Check whether a user is eligible for the reputation role
+
+        If so, the role will be added if they do not have it. If not, the role will be removed if they have it.
+        """
+        gld = ctx.guild
+        if user is None:
+            user = ctx.author
+
+        rep_role = await self.get_reputation_role_obj(gld)
         user_opt_out = await self.config.user(user).opt_out()
-
-        if not user_opt_out:
-            rep_role_id = await self.config.guild(gld).reputation_role()
-            rep_role = discord.utils.get(gld.roles, id=rep_role_id)
-            recent_reps = await self.rep_db.recent_reps(user_id=user.id, decay=decay_datetime)
-
-            for role in user_roles:
-                if role == rep_role:
-                    user_has_role = True
-
-            if user_total_reps[0] >= role_threshold:
-                if recent_reps >= threshold and not user_has_role:
+        if rep_role and not user_opt_out:  # Don't check if the role is not configured.
+            has_role: bool = rep_role in user.roles  # Check if user has the reputation role.
+            # Check whether a user's total reputations exceed the threshold.
+            u_total_reps: int = (await self.rep_db.user_rep_count(user.id))[0]
+            role_threshold = await self.config.guild(gld).role_threshold()
+            if u_total_reps >= role_threshold:
+                # Get decay period, decay threshold, and use those for comparisons.
+                decay_secs = await self.config.guild(gld).decay_period()
+                if decay_secs:  # Decay threshold configured.
+                    decay_min = await self.config.guild(gld).decay_threshold()
+                    decay_dt = ctx.message.created_at - dt.timedelta(seconds=decay_secs)
+                    recent_rep_count = await self.rep_db.recent_reps(user_id=user.id, start_time=decay_dt)
+                    if not has_role and recent_rep_count >= decay_min:
+                        await user.add_roles(rep_role)
+                    elif has_role and recent_rep_count < decay_min:
+                        await user.remove_roles(rep_role)
+                elif not has_role:  # No decay, but above rep threshold.
                     await user.add_roles(rep_role)
-
-                elif recent_reps < threshold and user_has_role:
-                    await user.remove_roles(rep_role)
-            else:
+            elif has_role:
                 await user.remove_roles(rep_role)
-        else:
-            return None
 
     # TODO: Add method to give reputation role to all eligible people (excl. abstain), and to remove from the rest.
+
+    async def get_reputation_role_obj(self, guild: discord.Guild) -> Optional[discord.Role]:
+        """Get the reputation role object if a role ID is set, None otherwise
+
+        If a role ID is set but no role is found, this will return an error"""
+        rep_role = None
+        rep_role_id = await self.config.guild(guild).reputation_role()
+        if rep_role_id:
+            rep_role = discord.utils.get(guild.roles, id=rep_role_id)
+            assert rep_role, "The reputation role ID is configured, but the role does not exist!"
+        return rep_role
+
     @staticmethod
     def plural_s(n: int) -> str:
         """Returns an 's' if n is not 1, otherwise returns an empty string"""

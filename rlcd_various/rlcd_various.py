@@ -9,7 +9,7 @@ from redbot.core import checks, Config
 from redbot.core.bot import Red
 
 
-RLCD_GLD_ID = 512425739841306624  # 317323644961554434 TODO: Update when testing is over.
+RLCD_GLD_ID = 317323644961554434
 
 
 def is_in_rlcd():

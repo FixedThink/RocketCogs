@@ -57,7 +57,7 @@ class DbQueries:
         return platform, gamer_id
 
     # Utilities.
-    async def exec_sql(self, query, params=None, commit=False) -> tuple:
+    async def exec_sql(self, query, params=None, commit=False) -> list:
         """Make an SQL query to the userID - gamer ID Database"""
         async with aiosqlite.connect(self.path) as db:
             async with db.execute(query, parameters=params) as cursor:
