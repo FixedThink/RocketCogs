@@ -44,6 +44,8 @@ class Reputation(commands.Cog):
     ROLE_CONFIG_CLEARED = BIN + "Disabled the reputation role.\n" \
                                 "You can configure the active role by including it at the end of the command."
     ROLE_CONFIG_SET = DONE + "Successfully set the active role."
+    ROLE_THRESHOLD_CLEARED = BIN + "Succesfully set the role threshold to the default value: `2`"
+    ROLE_THRESHOLD_SET = DONE + "Succesfully set the role threshold."
     USER_OPT_IN = DONE + "You will now receive a reputation role when eligible."
     USER_OPT_OUT = BIN + "You will no longer receive a reputation role, even when eligible."
     # Other constant strings.
@@ -210,6 +212,22 @@ class Reputation(commands.Cog):
         else:  # Set decay to time provided.
             await self.config.guild(gld).decay_period.set(delta_sec)
             msg = self.DECAY_SET.format(str(delta))
+        await ctx.send(msg)
+
+    @checks.admin_or_permissions(administrator=True)
+    @_reputation_settings.command(name="role_threshold")
+    async def set_role_threshold(self, ctx: Context, threshold: int = None):
+        """Set the role threshold
+
+        Role threshold is the amount of reputations you need to have received before getting the reputation role.
+        """
+        gld = ctx.guild
+        if not threshold:  # Clear config.
+            await self.config.guild(gld).role_threshold.clear()
+            msg = self.ROLE_THRESHOLD_CLEARED
+        else:  # Set role threshold to int provided.
+            await self.config.guild(gld).role_threshold.set(threshold)
+            msg = self.ROLE_THRESHOLD_SET
         await ctx.send(msg)
 
     @commands.guild_only()
