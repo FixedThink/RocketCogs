@@ -36,6 +36,8 @@ class Reputation(commands.Cog):
     DECAY_CLEARED = BIN + "Set the reputation decay back to the default settings."
     DECAY_REMOVED = BIN + "Disabled reputation decay."
     DECAY_SET = DONE + "Set the reputation decay to {}"
+    DECAY_THRESHOLD_CLEARED = BIN + "Successfully set the decay threshold to the default: `2`"
+    DECAY_THRESHOLD_SET = DONE + "Successfully set the decay threshold to {}"
     REP_BAD_INPUT = ERROR + "Your input was not fully valid! Note that username is case-sensitive."
     REP_NOT_COOL = ERROR + "You have given that user a reputation too recently!"
     REP_COMMENT_HAS_AT = ERROR + "Please do not tag any people in the rep reason!\n" \
@@ -44,8 +46,8 @@ class Reputation(commands.Cog):
     ROLE_CONFIG_CLEARED = BIN + "Disabled the reputation role.\n" \
                                 "You can configure the active role by including it at the end of the command."
     ROLE_CONFIG_SET = DONE + "Successfully set the active role."
-    ROLE_THRESHOLD_CLEARED = BIN + "Succesfully set the role threshold to the default value: `2`"
-    ROLE_THRESHOLD_SET = DONE + "Succesfully set the role threshold."
+    ROLE_THRESHOLD_CLEARED = BIN + "Successfully set the role threshold to the default value: `10`"
+    ROLE_THRESHOLD_SET = DONE + "Successfully set the role threshold to {}"
     USER_OPT_IN = DONE + "You will now receive a reputation role when eligible."
     USER_OPT_OUT = BIN + "You will no longer receive a reputation role, even when eligible."
     # Other constant strings.
@@ -129,6 +131,18 @@ class Reputation(commands.Cog):
             if rep_role_obj and rep_role_obj in aut.roles:
                 await aut.remove_roles(rep_role_obj)
         await ctx.send(to_send)
+
+    @checks.admin_or_permissions(administrator=True)
+    @_reputation_settings.command(name="decay_threshold")
+    async def set_decay_threshold(self, ctx: Context, threshold: int = None):
+        gld = ctx.guild
+        if not threshold:  # Clear config.
+            await self.config.guild(gld).decay_threshold.clear()
+            msg = self.DECAY_THRESHOLD_CLEARED
+        else:  # Set decay threshold to int provided.
+            await self.config.guild(gld).decay_threshold.set(threshold)
+            msg = self.DECAY_THRESHOLD_SET.format(str(threshold))
+        await ctx.send(msg)
 
     @commands.guild_only()
     @checks.admin_or_permissions(administrator=True)
@@ -227,7 +241,7 @@ class Reputation(commands.Cog):
             msg = self.ROLE_THRESHOLD_CLEARED
         else:  # Set role threshold to int provided.
             await self.config.guild(gld).role_threshold.set(threshold)
-            msg = self.ROLE_THRESHOLD_SET
+            msg = self.ROLE_THRESHOLD_SET.format(str(threshold))
         await ctx.send(msg)
 
     @commands.guild_only()
