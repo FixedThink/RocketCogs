@@ -397,6 +397,18 @@ class Reputation(commands.Cog):
                 await user.remove_roles(rep_role)
 
     # TODO: Add method to give reputation role to all eligible people (excl. abstain), and to remove from the rest.
+    async def give_eligible_users(self, role_threshold: int, decay_threshold: int, decay_period: int, gld: discord.Guild = None):
+        """
+        Give all eligible users the reputation role, and remove from users who have the role, but are not eligible.
+
+        If no guild is given, all guilds the bot is in will be iterated through.
+        """
+        if gld:
+            pass
+        else:
+            guilds = self.bot.guilds
+            for guild in guilds:
+                pass
 
     async def get_reputation_role_obj(self, guild: discord.Guild) -> Optional[discord.Role]:
         """Get the reputation role object if a role ID is set, None otherwise

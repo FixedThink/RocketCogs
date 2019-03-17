@@ -20,6 +20,9 @@ class DbQueries:
                        "MAX(stamp) as most_recent FROM reputations WHERE to_user = ?;"
     SELECT_LEADERBOARD = "SELECT to_user, COUNT(to_user) as rep_count FROM reputations " \
                          "GROUP BY to_user ORDER BY rep_count DESC, MAX(stamp) DESC;"
+    CHECK_SIMPLE = "SELECT to_user from reputations GROUP BY to_user HAVING COUNT(*) >= ?;"
+    CHECK_DOUBLE = "SELECT to_user from reputations WHERE stamp > ? GROUP BY to_user HAVING COUNT(*) >= ?\n" \
+                   "INTERSECT\n" + CHECK_SIMPLE
     GET_RECENT_REPS = "SELECT COUNT(*) from reputations WHERE to_user = ? AND stamp > ?"
 
     def __init__(self, db_path):
@@ -41,6 +44,20 @@ class DbQueries:
             connection.commit()
         connection.close()
         return
+
+    async def all_eligible_users(self, decay_threshold: int, role_threshold: int, decay_period: int) -> List[Tuple[int]]:
+        """
+        :param decay_threshold: The minimum amount of reps a user needs to receive within decay_period to keep the reputation role.
+        :param role_threshold: The minimum amount of reps a user needs to receive the reputation role.
+        :param decay_period: The time period within a user needs to receive decay_threshold amount of reps to keep the reputation role.
+        :return: A list of all users who are eligible for the reputation role.
+        """
+        if decay_period:
+            stamp = dt.datetime.utcnow() - dt.timedelta(seconds=decay_period)
+            id_list = await self.exec_sql(self.CHECK_DOUBLE, params=[stamp, decay_threshold, role_threshold])
+        else:
+            id_list = await self.exec_sql(self.CHECK_SIMPLE, params=[role_threshold])
+        return id_list
 
     async def insert_rep(self, from_id: int, from_name: str, to_id: int, to_name: str, rep_dt: dt.datetime,
                          rep_msg: str = None, cooldown: int = None) -> bool:
