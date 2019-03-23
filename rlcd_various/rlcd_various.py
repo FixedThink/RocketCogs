@@ -92,6 +92,8 @@ class RlcdVarious(commands.Cog):
                     await msg.add_reaction(emote)
 
     # Config commands
+    @commands.guild_only()
+    @checks.admin_or_permissions(administrator=True)
     @commands.group(name="rlcdset", invoke_without_command=True)
     async def _rlcd_various_settings(self, ctx):
         """Configure the settings for this module."""

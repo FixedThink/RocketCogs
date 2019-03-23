@@ -137,7 +137,7 @@ class Reputation(commands.Cog):
     async def set_decay_threshold(self, ctx: Context, threshold: int = None):
         """Configure the decay threshold
 
-        Decay threshold is the amount of reps user must have received within the decay period for user to be eligible for reputation role.
+        A user must have received at least this amount of reputation during the decay period to be eligible for a role.
         """
         gld = ctx.guild
         if not threshold:  # Clear config.

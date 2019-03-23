@@ -6,7 +6,7 @@ from typing import List, Optional
 
 # Used by Red.
 import discord
-from redbot.core import commands  # Changed from discord.ext
+from redbot.core import commands
 from redbot.core import checks, Config, data_manager
 from redbot.core.bot import Red
 import redbot.core.utils.menus as red_menu
@@ -40,8 +40,8 @@ class LaFusee(commands.Cog):
     TOKEN_NOT_PRIVATE = ":warning: Because of safety reasons, please send the bot this command in DMs. Input ignored."
     TOKEN_INVALID = ERROR + "Token is invalid."
     # Rank role configuration constants.
-    R_CONF_DISABLED = BIN + "Successfully disabled the RL rank role functionality for this server."
-    R_CONF_ENABLED = DONE + "Successfully enabled the RL rank role functionality for this server."
+    R_CONF_DISABLED = BIN + "Successfully disabled the rank role functionality for this server."
+    R_CONF_ENABLED = DONE + "Successfully enabled the rank role functionality for this server."
     R_SPECIAL_IGNORE = DONE + "The rank role check will now ignore the special playlists."
     R_SPECIAL_UNIGNORE = BIN + "The rank role check will no longer ignore the special playlists."
     R_CONF_SUCCESS = DONE + "Successfully added all roles!"
@@ -56,7 +56,7 @@ class LaFusee(commands.Cog):
     R_DETECT_TOTAL = "**Total matches:** {match_count} out of 19\n{note}\n\n{rest}"
     # Account registration + rank role update constants.
     LINKED_UNRANKED = "Your linked account is (currently) unranked in every playlist."
-    RANK_ROLE_ADDED = "You received the {r_role} role, which is the highest rank of your linked account."
+    RANK_ROLE_ADDED = "You received the {r_role} role."
     RANK_ROLE_REMOVED = "Your rank roles are removed."
     RANK_ROLE_INTACT = "You already seem to have the right rank role ({r_role}), so your roles are not changed."
     RANK_ROLE_UPDATED = "Your rank role is successfully updated to {r_role}."
@@ -69,7 +69,7 @@ class LaFusee(commands.Cog):
     LINK_AND_RANKROLE_REMOVED = LINK_REMOVED + "\nIf you had any rank roles, these were removed as well."  # 1 {}
     LINK_REMOVE_ROLE_NOTE = "Keep in mind that you __don't__ have to unlink your account to update any rank roles.\n"
     LINK_REMOVE_PROMPT = "**Are you sure you want to unlink your account?**\n{}" \
-                         "If you are sure, resend this command, but with `yes` at the end, to unlink your {} ID. " \
+                         "If so, resend this command, but with `yes` at the end, to unlink your {} ID. " \
                          "No action needed otherwise. {}"  # 3× {}.
     # General user link errors.
     USER_NOT_REGISTERED = ERROR + "This user has not registered their account!"
@@ -92,8 +92,8 @@ class LaFusee(commands.Cog):
     PLAYLIST_INPUT = "Playlists are accepted in multiple formats, including:\n" \
                      "`casual` • `duel` • `doubles` • `solostandard` • `hoops` • `rumble` • `dropshot` • `snowday\n" \
                      "1s` • `2s` • `ss` • `3s` • `hs` • `rb` • `ds` • `sd`"
-    PROFILE_INPUT = "**PC** – Use your vanity ID, the long number, or just link to your profile.\n" \
-                    "**PS4** – Use your player tag (may be case-sensitive).\n" \
+    PROFILE_INPUT = "**PC** – Use your vanity ID (__not__ display name!), the long number, " \
+                    "or just link to your profile.\n**PS4** – Use your player tag (may be case-sensitive).\n" \
                     "**XBOX** – Use your player tag. If it has spaces, surround it with quotes."
     INFO_FOOTER = "If any input is invalid though it should be valid, please reach out to the developer!"
     # Assertion error constants.
