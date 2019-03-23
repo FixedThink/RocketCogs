@@ -45,7 +45,7 @@ class LaFusee(commands.Cog):
     R_SPECIAL_IGNORE = DONE + "The rank role check will now ignore the special playlists."
     R_SPECIAL_UNIGNORE = BIN + "The rank role check will no longer ignore the special playlists."
     R_CONF_SUCCESS = DONE + "Successfully added all roles!"
-    R_CONF_NOT_ENABLED = "Don't forget to enable the RL rank role functionality by doing `{}{}`"
+    R_CONF_NOT_ENABLED = "Don't forget to enable the RL rank role functionality by doing {}"
     R_CONF_INVALID_MODE = ERROR + "Invalid mode."
     R_CONF_INCOMPLETE = "You can either add each missing role individually using {}, " \
                         "or rerun this command when all roles are set up."
@@ -281,7 +281,7 @@ class LaFusee(commands.Cog):
             if matches < 19:
                 comment = self.R_CONF_INCOMPLETE.format("`SoonTM`")  # TODO: add manual command.
             elif await self.config.guild(gld).rankrole_enabled() is False:
-                comment = self.R_CONF_NOT_ENABLED.format(ctx.prefix, self.toggle_rl_role.qualified_name)
+                comment = self.R_CONF_NOT_ENABLED.format(com(ctx, self.toggle_rl_role))
             else:
                 comment = self.R_CONF_SUCCESS
             to_say = self.R_DETECT_TOTAL.format(match_count=matches, note=comment, rest="\n".join(say_list))
@@ -440,7 +440,7 @@ class LaFusee(commands.Cog):
         url_platform, url_id = await self.link_db.select_user(user.id)
         if None in (url_platform, url_id):  # User is not properly registered.
             if user == ctx.author:
-                notice = self.AUTHOR_REGISTER_PROMPT.format(com(ctx, self.register_tag.qualified_name))
+                notice = self.AUTHOR_REGISTER_PROMPT.format(com(ctx, self.register_tag))
             else:
                 notice = self.USER_NOT_REGISTERED
         else:  # Valid registration.
@@ -474,7 +474,7 @@ class LaFusee(commands.Cog):
         url_platform, url_id = await self.link_db.select_user(user.id)
         if None in (url_platform, url_id):  # User is not properly registered.
             if user == ctx.author:
-                notice = self.AUTHOR_REGISTER_PROMPT.format(com(ctx, self.register_tag.qualified_name))
+                notice = self.AUTHOR_REGISTER_PROMPT.format(com(ctx, self.register_tag))
             else:
                 notice = self.USER_NOT_REGISTERED
         else:  # Valid registration.
@@ -518,7 +518,7 @@ class LaFusee(commands.Cog):
             url_platform, url_id = await self.link_db.select_user(user.id)
             if None in (url_platform, url_id):  # User is not properly registered.
                 if user == ctx.author:
-                    notice = self.AUTHOR_REGISTER_PROMPT.format(com(ctx, self.register_tag.qualified_name))
+                    notice = self.AUTHOR_REGISTER_PROMPT.format(com(ctx, self.register_tag))
                 else:
                     notice = self.USER_NOT_REGISTERED
             else:  # Valid registration.
