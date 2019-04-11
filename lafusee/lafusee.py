@@ -529,6 +529,25 @@ class LaFusee(commands.Cog):
         if notice:
             await ctx.send(notice)
 
+    # Extra commands.
+    @commands.command(name="steamadd", aliases=["add"])
+    async def send_steam_link(self, ctx, profile_id: str = None):
+        """Send a direct link to your steam account in chat
+
+        This allows others to open up your account directly in the steam client.
+        If no account is provided, it will try to use your linked account."""
+        notice = None
+        if not profile_id:
+            url_platform, url_id = await self.link_db.select_user(ctx.author.id)
+            if None in (url_platform, url_id):
+                notice = self.AUTHOR_REGISTER_PROMPT.format(com(ctx, self.register_tag))
+        else:
+            url_platform, url_id, notice = await self.platform_id_bundle("steam", profile_id)
+        if not notice:
+            await ctx.send(self.STEAM_APP_URL.format(url_id))
+        else:
+            await ctx.send(notice)
+
     # Debug commands.
     @checks.admin_or_permissions(administrator=True)
     @commands.group(name="rltest", invoke_without_command=True)

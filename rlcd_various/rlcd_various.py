@@ -1,6 +1,7 @@
 # Default Library.
 import asyncio
 from typing import List
+from textwrap import shorten
 
 # Used by Red.
 import discord
@@ -37,13 +38,17 @@ class RlcdVarious(commands.Cog):
     INHOUSES_WRONG_CHANNEL = ERROR + "This is not the channel for inhouses! Go to <#{}> instead."
     LTC_ROLE_CLEARED = BIN + "Successfully cleared the LTC role."
     LTC_ROLE_SET = DONE + "Successfully set the LTC role."
+    LTC_ROLE_U_DEL = BIN + "Removed your LTC role."
+    LTC_NOT_ONLINE = ERROR + "You are not online (green bulb)!\nPlease set yourself to online first."
+    LTC_NOT_SET = ERROR + "No LTC role is configured! Please contact an admin."
     NICKNAME_TOO_LONG = ERROR + "Your provided nickname is too long!\n" \
                                 "To fit your nickname along with the region tag, it can be at most 27 characters."
-    NICKNAME_NO_ROLE = ERROR + "You do not have any region roles! Please set one before applying for a nickname."
+    NO_REGION_ROLE = ERROR + "You do not have a region role! Please set one first."
     NICKNAME_SET = DONE + "Nickname set."
     NICKNAME_PERMISSIONS = ERROR + "I cannot give you a nickname!"
     SUGGESTION_CHANNEL_SET = DONE + "Successfully set the suggestions channel to {c}."
     SUGGESTION_CHANNEL_CLEARED = BIN + "Cleared the suggestions channel configuration."
+
     # Other constants.
     LOBBY_EMBED_TITLE = "Inhouses invite by {}."
     LTC_SLEEP_TIME = 28 * 60  # 28 minutes.
@@ -91,18 +96,31 @@ class RlcdVarious(commands.Cog):
                 for emote in self.SUGGEST_EMOTES:
                     await msg.add_reaction(emote)
 
+    async def on_member_update(self, m_old: discord.Member, m_new: discord.Member):
+        """Give a member a nickname if they set a region"""
+        new_role_name = next((r.name for r in m_new.roles if r not in m_old.roles), None)
+        if new_role_name:
+            region_tag = self.REGION_ROLE_TAG.get(new_role_name, None)
+            if region_tag:  # Region role added, give nickname.
+                # Create the nickname to set. Shorten to 32 if it would exceed 32 chars.
+                to_set = shorten(f"[{region_tag}] {m_new.name}", 32, placeholder="...")
+                try:
+                    await m_new.edit(nick=to_set, reason="RLCD region addition.")
+                except discord.Forbidden:
+                    pass
+
     # Config commands
     @commands.guild_only()
     @checks.admin_or_permissions(administrator=True)
     @commands.group(name="rlcdset", invoke_without_command=True)
-    async def _rlcd_various_settings(self, ctx):
+    async def _rlcd_various_settings(self, ctx: commands.Context):
         """Configure the settings for this module."""
         await ctx.send_help()
 
     @commands.guild_only()
     @checks.admin_or_permissions(administrator=True)
     @_rlcd_various_settings.command(name="inhouses_channel")
-    async def set_inhouses_channel(self, ctx):
+    async def set_inhouses_channel(self, ctx: commands.Context):
         """Set the inhouses channel to the current channel
 
         If the current channel is already the inhouses channel, the config gets cleared."""
@@ -119,7 +137,7 @@ class RlcdVarious(commands.Cog):
     @commands.guild_only()
     @checks.admin_or_permissions(administrator=True)
     @_rlcd_various_settings.command(name="suggestions_channel")
-    async def set_suggestions_channel(self, ctx):
+    async def set_suggestions_channel(self, ctx: commands.Context):
         """Set the suggestions channel to the current channel
 
         If the current channel is already the suggestions channel, the config gets cleared."""
@@ -136,7 +154,7 @@ class RlcdVarious(commands.Cog):
     @_rlcd_various_settings.command(name="ltc_role")
     @commands.guild_only()
     @checks.admin_or_permissions(administrator=True)
-    async def set_ltc_role(self, ctx, role: discord.Role = None):
+    async def set_ltc_role(self, ctx: commands.Context, role: discord.Role = None):
         """Set the role to perform the LTC check on
 
         If no role is provided, the currently set role will be deleted."""
@@ -152,7 +170,7 @@ class RlcdVarious(commands.Cog):
     @commands.guild_only()
     @commands.command()
     @commands.cooldown(1, 60 * 10, type=commands.cooldowns.BucketType.channel)  # 1 message per 10 minutes.
-    async def lobby(self, ctx, region: str, lobby_name: str, password: str, *, optional_text=None):
+    async def lobby(self, ctx: commands.Context, region: str, lobby_name: str, password: str, *, optional_text=None):
         """Create an invite message for an inhouses lobby
 
         This invite will ping `@here`. Note that there is a 10-minute cooldown on the command."""
@@ -171,15 +189,47 @@ class RlcdVarious(commands.Cog):
             await ctx.send("New inhouses invite. @here", embed=embed, filter=None)
 
     @is_in_rlcd()
+    @commands.guild_only()
+    @commands.command(name="ltc")
+    async def looking_to_coach(self, ctx: commands.Context):
+        """Give yourself the Looking to Coach role
+
+        You must have set a region and you must be in online status.
+        If you already have the role, this command will remove it."""
+        notice = None
+        user = ctx.author
+        gld = ctx.guild
+        ltc_id = await self.config.guild(gld).ltc_role_id()
+
+        if ltc_id:  # Role ID is configured.
+            role_obj: discord.Role = discord.utils.get(gld.roles, id=ltc_id)
+            assert role_obj, "No role object!"
+            if role_obj in user.roles:
+                await user.remove_roles(role_obj)
+                notice = self.LTC_ROLE_U_DEL
+            elif any(self.REGION_ROLE_TAG.get(r.name, False) for r in user.roles):
+                if user.status == discord.Status.online:
+                    await user.add_roles(role_obj)
+                    await ctx.tick()
+                else:
+                    notice = self.LTC_NOT_ONLINE
+            else:
+                notice = self.NO_REGION_ROLE
+        else:
+            notice = self.LTC_NOT_SET
+        if notice:
+            await ctx.send(notice)
+
+    @is_in_rlcd()
     @commands.command(name="nickname", aliases=["nick"])
-    async def user_set_nickname(self, ctx, *, nickname: str):
+    async def user_set_nickname(self, ctx: commands.Context, *, nickname: str):
         """Set your own nickname
 
         Your nickname will be automatically prefixed with your region, like [EU]."""
         user = ctx.author
         region_tag = next((self.REGION_ROLE_TAG[r.name] for r in user.roles if r.name in self.REGION_ROLE_TAG), None)
         if not region_tag:
-            to_say = self.NICKNAME_NO_ROLE
+            to_say = self.NO_REGION_ROLE
         elif len(nickname) > 27:
             to_say = self.NICKNAME_TOO_LONG
         else:

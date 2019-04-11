@@ -107,13 +107,17 @@ class GetJsonData:
         tier = self.get_tier_name(tier_n)
         return "{} Div. {}".format(tier, div) if tier_n not in (0, 19) else tier
 
-    def reward_level_str(self, response: dict):
+    def reward_level_str(self, response: dict) -> str:
         """
         :param response: The PlayerSkills API response dict
         :return: A player's Season Rewards level summarised into a string
         """
         rewards = response["season_rewards"]
         level, wins = rewards["level"], rewards["wins"]
-        level_str = self.divmod_tiers[level]
-        bonus_str = " (+{})".format(wins) if level != 7 else ""
-        return "{}{}".format(level_str, bonus_str)
+        if level:
+            level_str = self.divmod_tiers[level]
+            bonus_str = " (+{})".format(wins) if level != 7 else ""
+            to_return = "{}{}".format(level_str, bonus_str)
+        else:
+            to_return = "*None*"
+        return to_return
