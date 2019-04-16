@@ -63,7 +63,10 @@ class RlcdVarious(commands.Cog):
         super().__init__()
         self.bot = bot
         self.config = Config.get_conf(self, identifier=7509)
-        self.config.register_guild(inhouses_channel_id=None, suggest_channel_id=None, ltc_role_id=None)
+        # TODO: Do the Twitch thing.
+        # TODO: Make role toggles for inhouses and meme (low-priority).
+        self.config.register_guild(inhouses_channel_id=None, suggest_channel_id=None,
+                                   ltc_role_id=None, twitch_role_id=None, hoist_twitch_id=None)
         self.ltc_loop = asyncio.ensure_future(self.check_ltc())
 
     # Loops

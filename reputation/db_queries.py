@@ -1,7 +1,7 @@
 # Default library.
 import datetime as dt
 import sqlite3  # Only to make the db on init.
-from typing import List, Optional, Tuple
+from typing import List, Optional, Tuple, Set
 
 # Requirements.
 import aiosqlite
@@ -45,19 +45,20 @@ class DbQueries:
         connection.close()
         return
 
-    async def all_eligible_users(self, decay_threshold: int, role_threshold: int, decay_period: int) -> List[Tuple[int]]:
+    async def all_eligible_users(self, decay_threshold: int, role_threshold: int,
+                                 decay_period: Optional[int]) -> Set[int]:
         """
-        :param decay_threshold: The minimum amount of reps a user needs to receive within decay_period to keep the reputation role.
+        :param decay_threshold: The minimum amount of reps a user must receive within decay_period to keep the role.
         :param role_threshold: The minimum amount of reps a user needs to receive the reputation role.
-        :param decay_period: The time period within a user needs to receive decay_threshold amount of reps to keep the reputation role.
-        :return: A list of all users who are eligible for the reputation role.
+        :param decay_period: The time period in which a user must receive decay_threshold reps to keep the role.
+        :return: A list of all user ids who are eligible for the reputation role.
         """
         if decay_period:
             stamp = dt.datetime.utcnow() - dt.timedelta(seconds=decay_period)
             id_list = await self.exec_sql(self.CHECK_DOUBLE, params=[stamp, decay_threshold, role_threshold])
         else:
             id_list = await self.exec_sql(self.CHECK_SIMPLE, params=[role_threshold])
-        return id_list
+        return {x[0] for x in id_list}
 
     async def insert_rep(self, from_id: int, from_name: str, to_id: int, to_name: str, rep_dt: dt.datetime,
                          rep_msg: str = None, cooldown: int = None) -> bool:
