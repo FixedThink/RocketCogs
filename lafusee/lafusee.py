@@ -21,6 +21,7 @@ from .db_queries import DbQueries
 
 class LaFusee(commands.Cog):
     """Rocket League rank commands"""
+    # TODO: Give notice about spaces when someone with xbox puts in their ID wrongly. (or fix with *).
     # Constants.
     PSY_TOKEN_LEN = 40
     STEAM_TOKEN_LEN = 32

@@ -29,8 +29,9 @@ class Reputation(commands.Cog):
     DONE = ":white_check_mark: "
     # Notices.
     BAD_CHANNEL = ERROR + "Reputation not added, please use the correct channel for reputations!"
-    CHANNEL_CLEARED = BIN + "Cleared the channel configuration. Reputation can now be given in any channel."
-    CHANNEL_SET = DONE + "Set the reputation channel to {}."
+    REP_CHANNEL_CLEARED = BIN + "Cleared the channel configuration. Reputation can now be given in any channel."
+    LOG_CHANNEL_CLEARED = BIN + "Cleared the channel configuration. Logs are disabled."
+    CHANNEL_SET = DONE + "Set the channel to {}."
     COOLDOWN_CLEARED = BIN + "Set the reputation cooldown back to the default settings."
     COOLDOWN_REMOVED = BIN + "Disabled the reputation cooldown."
     COOLDOWN_SET = DONE + "Set the reputation cooldown to {}."
@@ -74,8 +75,8 @@ class Reputation(commands.Cog):
         self.config = Config.get_conf(self, identifier=5006, force_registration=True)
         self.config.register_guild(cooldown_period=self.DEFAULT_COOLDOWN, decay_period=self.DEFAULT_DECAY,
                                    reputation_role=None, role_threshold=10, decay_threshold=2,
-                                   reputation_channel=None, shadow_role=None,
-                                   log_channel=None, log_message=None)
+                                   reputation_channel=None, shadow_role=None, log_channel=None,
+                                   log_message="{user} just received their reputation role.")
         self.config.register_user(opt_out=False)
         self.rep_db = DbQueries(self.PATH_DB)
 
@@ -167,6 +168,21 @@ class Reputation(commands.Cog):
             msg = self.DECAY_THRESHOLD_SET.format(str(threshold))
         await ctx.send(msg)
 
+    @_reputation_settings.command(name="log_message")
+    @commands.guild_only()
+    @checks.admin_or_permissions(administrator=True)
+    async def set_log_message(self, ctx: Context, *, message_text=None):
+        """Set the message to be used when a member gets the reputation role for the first time
+
+        In order to specify a user mention, please use `{user}` inside the text.
+        Please avoid the usage of any other curly brackets."""
+        if message_text is None:
+            await self.config.guild(ctx.guild).log_message.clear()
+            await ctx.send(self.LOG_MSG_RESET)
+        else:
+            await self.config.guild(ctx.guild).log_message.set(message_text)
+            await ctx.tick()
+
     @commands.guild_only()
     @checks.admin_or_permissions(administrator=True)
     @_reputation_settings.command(name="role")
@@ -202,7 +218,24 @@ class Reputation(commands.Cog):
 
     @commands.guild_only()
     @checks.admin_or_permissions(administrator=True)
-    @_reputation_settings.command(name="channel")
+    @_reputation_settings.command(name="log_channel")
+    async def set_log_channel(self, ctx: Context):
+        """Set the current channel as the reputation channel
+
+        If this channel is already the reputation channel, the config will be cleared."""
+        channel = ctx.channel
+        gld = ctx.guild
+        if channel.id == await self.config.guild(gld).log_channel():
+            await self.config.guild(gld).log_channel.clear()
+            msg = self.LOG_CHANNEL_CLEARED
+        else:
+            await self.config.guild(gld).log_channel.set(channel.id)
+            msg = self.CHANNEL_SET.format(channel.mention)
+        await ctx.send(msg)
+
+    @commands.guild_only()
+    @checks.admin_or_permissions(administrator=True)
+    @_reputation_settings.command(name="reputation_channel")
     async def set_rep_channel(self, ctx: Context):
         """Set the current channel as the reputation channel
 
@@ -211,7 +244,7 @@ class Reputation(commands.Cog):
         gld = ctx.guild
         if channel.id == await self.config.guild(gld).reputation_channel():
             await self.config.guild(gld).reputation_channel.clear()
-            msg = self.CHANNEL_CLEARED
+            msg = self.REP_CHANNEL_CLEARED
         else:
             await self.config.guild(gld).reputation_channel.set(channel.id)
             msg = self.CHANNEL_SET.format(channel.mention)
@@ -283,21 +316,6 @@ class Reputation(commands.Cog):
             await self.config.guild(gld).role_threshold.set(threshold)
             msg = self.ROLE_THRESHOLD_SET.format(str(threshold))
         await ctx.send(msg)
-
-    @_reputation_settings.command(name="welcome_message")
-    @commands.guild_only()
-    @checks.admin_or_permissions(administrator=True)
-    async def set_log_message(self, ctx: Context, *, message_text=None):
-        """Set the message to be used when a member gets the reputation role for the first time
-
-        In order to specify a user mention, please use `{user}` inside the text.
-        Please avoid the usage of any other curly brackets."""
-        if message_text is None:
-            await self.config.guild(ctx.guild).log_message.clear()
-            await ctx.send(self.LOG_MSG_RESET)
-        else:
-            await self.config.guild(ctx.guild).log_message.set(message_text)
-            await ctx.tick()
 
     @_reputation_settings.command(name="full_check")
     @commands.guild_only()
