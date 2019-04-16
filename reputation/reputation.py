@@ -489,8 +489,8 @@ class Reputation(commands.Cog):
         The reputation role will only be added if they did not opt out for it.
         """
         to_return, should_log = False, False
-        shadow_role = self.get_shadow_role_obj(guild)
-        opt_out = self.config.user(member).opt_out()
+        shadow_role = await self.get_shadow_role_obj(guild)
+        opt_out = await self.config.user(member).opt_out()
 
         roles_to_add = []
         if shadow_role:
@@ -507,7 +507,7 @@ class Reputation(commands.Cog):
 
         if roles_to_add:  # First add role(s), then log (if needed).
             to_return = True
-            await member.add_roles(roles_to_add, reason=reason)
+            await member.add_roles(*roles_to_add, reason=reason)
             if should_log:
                 log_channel_id, log_message = guild_config["log_channel"], guild_config["log_message"]
                 log_channel = discord.utils.get(guild.channels, id=log_channel_id)
