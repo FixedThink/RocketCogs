@@ -1,6 +1,6 @@
 # Default Library.
 import asyncio
-from typing import List
+from typing import List, Optional
 from textwrap import shorten
 
 # Used by Red.
@@ -37,7 +37,6 @@ class RlcdVarious(commands.Cog):
     INHOUSES_NO_CHANNEL = ERROR + "The inhouses channel is not configured!"
     INHOUSES_WRONG_CHANNEL = ERROR + "This is not the channel for inhouses! Go to <#{}> instead."
     LTC_ROLE_CLEARED = BIN + "Successfully cleared the LTC role."
-    LTC_ROLE_SET = DONE + "Successfully set the LTC role."
     LTC_ROLE_U_DEL = BIN + "Removed your LTC role."
     LTC_NOT_ONLINE = ERROR + "You are not online (green bulb)!\nPlease set yourself to online first."
     LTC_NOT_SET = ERROR + "No LTC role is configured! Please contact an admin."
@@ -48,6 +47,9 @@ class RlcdVarious(commands.Cog):
     NICKNAME_PERMISSIONS = ERROR + "I cannot give you a nickname!"
     SUGGESTION_CHANNEL_SET = DONE + "Successfully set the suggestions channel to {c}."
     SUGGESTION_CHANNEL_CLEARED = BIN + "Cleared the suggestions channel configuration."
+    TWITCH_ROLES_CLEARED = BIN + "Successfully cleared the Twitch roles configuration."
+    TWITCH_NO_SUB = ERROR + "You are not subscribed to the Twitch channel!"
+    TWITCH_NOT_CONFIGURED = ERROR + "The Twitch roles are not configured!"
 
     # Other constants.
     LOBBY_EMBED_TITLE = "Inhouses invite by {}."
@@ -66,7 +68,6 @@ class RlcdVarious(commands.Cog):
         super().__init__()
         self.bot = bot
         self.config = Config.get_conf(self, identifier=7509)
-        # TODO: Do the Twitch thing.
         # TODO: Make role toggles for inhouses and meme (low-priority).
         self.config.register_guild(inhouses_channel_id=None, suggest_channel_id=None,
                                    ltc_role_id=None, twitch_role_id=None, hoist_twitch_id=None, feenix_mmr_counter=0)
@@ -103,10 +104,10 @@ class RlcdVarious(commands.Cog):
                     await msg.add_reaction(emote)
 
     async def on_member_update(self, m_old: discord.Member, m_new: discord.Member):
-        """Give a member a nickname if they set a region"""
-        new_role_name = next((r.name for r in m_new.roles if r not in m_old.roles), None)
-        if new_role_name:
-            region_tag = self.REGION_ROLE_TAG.get(new_role_name, None)
+        """Give a member a nickname if they set a region, and do the Twitch sub check"""
+        added_role: Optional[discord.Role] = next((r for r in m_new.roles if r not in m_old.roles), None)
+        if added_role:
+            region_tag = self.REGION_ROLE_TAG.get(added_role.name, None)
             if region_tag:  # Region role added, give nickname.
                 # Create the nickname to set. Shorten to 32 if it would exceed 32 chars.
                 to_set = shorten(f"[{region_tag}] {m_new.name}", 32, placeholder="...")
@@ -114,6 +115,14 @@ class RlcdVarious(commands.Cog):
                     await m_new.edit(nick=to_set, reason="RLCD region addition.")
                 except discord.Forbidden:
                     pass
+            else:
+                gld = m_new.guild
+                twitch_role_id = await self.config.guild(gld).twitch_role_id()
+                if twitch_role_id and added_role.id == twitch_role_id:
+                    hoist_twitch_id = await self.config.guild(gld).hoist_twitch_id()
+                    hoist_role = discord.utils.get(gld.roles, id=hoist_twitch_id)
+                    assert hoist_role, "Somehow, the twitch role is configured, but not the hoist role."
+                    await m_new.add_roles(hoist_role, reason="Received the Twitch sub role.")
 
     # Config commands
     @commands.guild_only()
@@ -165,12 +174,30 @@ class RlcdVarious(commands.Cog):
 
         If no role is provided, the currently set role will be deleted."""
         if not role:
-            to_send = self.LTC_ROLE_CLEARED
             await self.config.guild(ctx.guild).ltc_role_id.clear()
+            await ctx.send(self.LTC_ROLE_CLEARED)
         else:
-            to_send = self.LTC_ROLE_SET
             await self.config.guild(ctx.guild).ltc_role_id.set(role.id)
-        await ctx.send(to_send)
+            await ctx.tick()
+
+    @_rlcd_various_settings.command(name="twitch")
+    @commands.guild_only()
+    @checks.admin_or_permissions(administrator=True)
+    async def set_twitch_roles(self, ctx: commands.Context, role_1: discord.Role, role_2: discord.Role):
+        """Set the pair of Twitch roles
+
+        The first role must be the integration role, the second one the role to be added.
+        Config can be cleared by using the same role for both arguments"""
+        gld = ctx.guild
+        if role_1 == role_2:
+            # twitch_role_id=None, hoist_twitch_id=None)
+            await self.config.guild(gld).twitch_role_id.clear()
+            await self.config.guild(gld).hoist_twitch_id.clear()
+            await ctx.send(self.TWITCH_ROLES_CLEARED)
+        else:
+            await self.config.guild(ctx.guild).twitch_role_id.set(role_1.id)
+            await self.config.guild(ctx.guild).hoist_twitch_id.set(role_2.id)
+            await ctx.tick()
 
     # Main commands.
     @commands.guild_only()
@@ -227,6 +254,7 @@ class RlcdVarious(commands.Cog):
             await ctx.send(notice)
 
     @is_in_rlcd()
+    @commands.guild_only()
     @commands.command(name="nickname", aliases=["nick"])
     async def user_set_nickname(self, ctx: commands.Context, *, nickname: str):
         """Set your own nickname
@@ -254,7 +282,7 @@ class RlcdVarious(commands.Cog):
         """Counter for how many times Feenix has talked about his MMR"""
         await ctx.send_help()
 
-    @is_in_rlcd
+    @is_in_rlcd()
     @checks.admin_or_permissions(administrator=True)
     @_feenix_mmr_counter.command(name="set")
     async def set_counter(self, ctx, amount: int = 0):
@@ -279,5 +307,34 @@ class RlcdVarious(commands.Cog):
         new_count = current_count + 1
         await self.config.guild(ctx.guild).feenix_mmr_counter.set(new_count)
         await ctx.send(self.FEENIX_INCREASE.format(count=new_count))
+
+    @is_in_rlcd()
+    @commands.guild_only()
+    @commands.command(name="toggle_twitch")
+    async def toggle_twitch_role(self, ctx: commands.Context):
+        """Remove the hoisted twitch role if you have it, otherwise add it
+
+        Obviously, you must be subscribed to Twitch in order to do this."""
+        gld = ctx.guild
+        t_id = await self.config.guild(gld).twitch_role_id()
+        h_id = await self.config.guild(gld).hoist_twitch_id()
+        if t_id and h_id:
+            t_role = discord.utils.get(gld.roles, id=t_id)
+            h_role = discord.utils.get(gld.roles, id=h_id)
+            assert t_role and h_role, "Twitch roles do not exist!"
+            aut: discord.Member = ctx.author
+            if t_role in aut.roles:  # Toggle.
+                if h_role in aut.roles:
+                    await aut.remove_roles(h_role, reason="Twitch toggle command")
+                else:
+                    await aut.add_roles(h_role, reason="Twitch toggle command")
+                await ctx.tick()
+                notice = None
+            else:
+                notice = self.TWITCH_NO_SUB
+        else:
+            notice = self.TWITCH_NOT_CONFIGURED
+        if notice:
+            await ctx.send(notice)
 
     # Utilities

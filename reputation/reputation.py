@@ -1,4 +1,5 @@
 # Default Library.
+import asyncio
 import datetime as dt
 from asyncio import sleep
 from typing import Optional, Tuple, Set
@@ -22,6 +23,7 @@ class Reputation(commands.Cog):
     DEFAULT_COOLDOWN = 60 * 60 * 24 * 7  # 1 week (cooldown for user A to give user B rep).
     DEFAULT_DECAY = 60 * 60 * 24 * 7 * 5  # 5 weeks (35 days, time before the reputation role will decay).
     DEFAULT_LOG_MESSAGE = "{user} has received the reputation role."
+    LOOP_SLEEP_TIME = 60 * 60 * 12  # 12 hours.
 
     # Notice emote prefixes.
     BIN = ":put_litter_in_its_place: "
@@ -76,11 +78,19 @@ class Reputation(commands.Cog):
         self.config.register_guild(cooldown_period=self.DEFAULT_COOLDOWN, decay_period=self.DEFAULT_DECAY,
                                    reputation_role=None, role_threshold=10, decay_threshold=2,
                                    reputation_channel=None, shadow_role=None, log_channel=None,
-                                   log_message="{user} just received their reputation role.")
+                                   log_message=self.DEFAULT_LOG_MESSAGE)
         self.config.register_user(opt_out=False)
         self.rep_db = DbQueries(self.PATH_DB)
+        self.decay_loop = asyncio.ensure_future(self.periodical_decay_check())
 
-    # Events
+    # Loops
+    async def periodical_decay_check(self):
+        """Periodically perform the decay check for all guilds the bot is in"""
+        await self.bot.wait_until_ready()
+        while self == self.bot.get_cog(self.__class__.__name__):
+            for gld in self.bot.guilds:
+                await self.guild_role_check(gld)
+            await asyncio.sleep(self.LOOP_SLEEP_TIME)
 
     # Commands
     @commands.guild_only()  # Group not restricted to admins so that abstain can be used.
@@ -133,7 +143,7 @@ class Reputation(commands.Cog):
         await ctx.send(embed=embed)
 
     @commands.guild_only()
-    @_reputation_settings.command(name="abstain")
+    @_reputation_settings.command(name="opt_out", aliases=["abstain"])
     async def role_opt_out(self, ctx: Context):
         """Opt in/out of receiving a reputation role
 
@@ -534,7 +544,7 @@ class Reputation(commands.Cog):
             give_tup: Tuple[discord.Member, ...] = tuple(m for m in gld.members if m.id in give_set)
             take_tup: Tuple[discord.Member, ...] = tuple(m for m in current_list if m.id not in eligible_set)
 
-            remove_count = len(give_tup)
+            remove_count = len(take_tup)
             add_count = 0  # Accumulator.
             for member in give_tup:
                 is_given = await self.give_reputation_role(member, rep_role, gld, gld_config, reason=self.GLD_ADD)
