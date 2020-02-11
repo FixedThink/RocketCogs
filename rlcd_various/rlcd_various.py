@@ -60,6 +60,9 @@ class RlcdVarious(Cog):
     CONVERT_REGION = {"eu": "Europe", "europe": "Europe", "use": "US-East", "us-e": "US-East",
                       "nae": "US-East", "us-east": "US-East", "us east": "US-East", "usw": "US-West",
                       "us-w": "US-West", "naw": "US-West", "us-west": "US-West", "us wast": "US-West"}
+    FEENIX_INCREASE = "Count successfully increased. Feenix has now mentioned his MMR **{count}** times in RLCD."
+    FEENIX_SET = "The counter has been set to: **{}**."
+    FEENIX_VIEW = "Feenix has mentioned his MMR **{}** times in RLCD."
 
     def __init__(self, bot: Red):
         super().__init__()
@@ -67,7 +70,7 @@ class RlcdVarious(Cog):
         self.config = Config.get_conf(self, identifier=7509)
         # TODO: Make role toggles for inhouses and meme (low-priority).
         self.config.register_guild(inhouses_channel_id=None, suggest_channel_id=None,
-                                   ltc_role_id=None, twitch_role_id=None, hoist_twitch_id=None)
+                                   ltc_role_id=None, twitch_role_id=None, hoist_twitch_id=None, feenix_mmr_counter=0)
         self.ltc_loop = asyncio.ensure_future(self.check_ltc())
 
     # Loops
@@ -282,6 +285,38 @@ class RlcdVarious(Cog):
             else:
                 to_say = self.NICKNAME_SET
         await ctx.send(to_say)
+
+    @is_in_rlcd()
+    @commands.group(name="feenixmmr", invoke_without_command=True)
+    async def _feenix_mmr_counter(self, ctx: commands.Context):
+        """Counter for how many times Feenix has talked about his MMR"""
+        await ctx.send_help()
+
+    @is_in_rlcd()
+    @checks.admin_or_permissions(administrator=True)
+    @_feenix_mmr_counter.command(name="set")
+    async def set_counter(self, ctx, amount: int = 0):
+        """Set the counter to a specific amount.
+
+        If no amount is given, it will reset the counter to 0."""
+        await self.config.guild(ctx.guild).feenix_mmr_counter.set(amount)
+        await ctx.send(self.FEENIX_SET.format(amount))
+
+    @is_in_rlcd()
+    @_feenix_mmr_counter.command(name="view")
+    async def view_counter(self, ctx):
+        """View how many times Feenix has mentioned his MMR."""
+        amount = await self.config.guild(ctx.guild).feenix_mmr_counter()
+        await ctx.send(self.FEENIX_VIEW.format(amount))
+
+    @is_in_rlcd()
+    @_feenix_mmr_counter.command(name="add")
+    async def add_to_counter(self, ctx):
+        """Add 1 to the counter."""
+        current_count = await self.config.guild(ctx.guild).feenix_mmr_counter()
+        new_count = current_count + 1
+        await self.config.guild(ctx.guild).feenix_mmr_counter.set(new_count)
+        await ctx.send(self.FEENIX_INCREASE.format(count=new_count))
 
     @is_in_rlcd()
     @commands.guild_only()
