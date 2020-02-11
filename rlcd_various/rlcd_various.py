@@ -1,14 +1,14 @@
 # Default Library.
 import asyncio
-from typing import List, Optional
 from textwrap import shorten
+from typing import List, Optional
 
 # Used by Red.
 import discord
-from redbot.core import commands
 from redbot.core import checks, Config
+from redbot.core import commands
 from redbot.core.bot import Red
-
+from redbot.core.commands import Cog
 
 RLCD_GLD_ID = 317323644961554434
 
@@ -20,7 +20,7 @@ def is_in_rlcd():
     return commands.check(predicate)
 
 
-class RlcdVarious(commands.Cog):
+class RlcdVarious(Cog):
     """A collection of commands tailored to the needs of RLCD
 
     Some of these commands may be moved to a separate cog later on.
@@ -88,6 +88,7 @@ class RlcdVarious(commands.Cog):
             await asyncio.sleep(self.LTC_SLEEP_TIME)
 
     # Events
+    @Cog.listener()
     async def on_message(self, msg: discord.Message):
         """Add suggestion reactions"""
         gld = msg.guild
@@ -100,8 +101,11 @@ class RlcdVarious(commands.Cog):
                 for emote in self.SUGGEST_EMOTES:
                     await msg.add_reaction(emote)
 
+    @Cog.listener()
     async def on_member_update(self, m_old: discord.Member, m_new: discord.Member):
         """Give a member a nickname if they set a region, and do the Twitch sub check"""
+        gld = m_new.guild
+        twitch_role_id = await self.config.guild(gld).twitch_role_id()
         added_role: Optional[discord.Role] = next((r for r in m_new.roles if r not in m_old.roles), None)
         if added_role:
             region_tag = self.REGION_ROLE_TAG.get(added_role.name, None)
@@ -113,13 +117,19 @@ class RlcdVarious(commands.Cog):
                 except discord.Forbidden:
                     pass
             else:
-                gld = m_new.guild
-                twitch_role_id = await self.config.guild(gld).twitch_role_id()
                 if twitch_role_id and added_role.id == twitch_role_id:
                     hoist_twitch_id = await self.config.guild(gld).hoist_twitch_id()
                     hoist_role = discord.utils.get(gld.roles, id=hoist_twitch_id)
                     assert hoist_role, "Somehow, the twitch role is configured, but not the hoist role."
                     await m_new.add_roles(hoist_role, reason="Received the Twitch sub role.")
+        elif twitch_role_id:  # Check role removals.
+            removed_role: Optional[discord.Role] = next((r for r in m_old.roles if r not in m_new.roles), None)
+            if removed_role.id == twitch_role_id:
+                hoist_twitch_id = await self.config.guild(gld).hoist_twitch_id()
+                hoist_role = discord.utils.get(gld.roles, id=hoist_twitch_id)
+                assert hoist_role, "Somehow, the twitch role is configured, but not the hoist role."
+                if hoist_role in m_new.roles:
+                    await m_new.remove_roles(hoist_role, reason="Twitch sub ended.")
 
     # Config commands
     @commands.guild_only()

@@ -6,10 +6,10 @@ from typing import Optional, Tuple, Set
 
 # Used by Red.
 import discord
-from redbot.core import commands, checks, Config, data_manager
-from redbot.core.commands.context import Context  # For type hints.
-from redbot.core.bot import Red  # For type hints.
 import redbot.core.utils.menus as red_menu
+from redbot.core import commands, checks, Config, data_manager
+from redbot.core.bot import Red  # For type hints.
+from redbot.core.commands.context import Context  # For type hints.
 
 # Local files.
 from .db_queries import DbQueries
@@ -45,7 +45,8 @@ class Reputation(commands.Cog):
     LOG_MSG_RESET = BIN + "Log message reset to default."
     MANUAL_CHECK = DONE + "Performed the manual server check!\n" \
                           "**{add_n}** member{s} received a role, **{del_n}** lost a role."
-    REP_BAD_INPUT = ERROR + "Your input was not fully valid! Note that username is case-sensitive."
+    REP_BAD_INPUT = ERROR + "Your input was not fully valid! Note that a username is case-sensitive.\n" \
+                            "This message (and yours) will self-destruct after 30 seconds."
     REP_NOT_COOL = ERROR + "You have given that user a reputation too recently!"
     REP_COMMENT_HAS_AT = ERROR + "Please do not tag any people in the rep reason!\n" \
                                  "If you must mention someone, use their name instead."
@@ -372,18 +373,17 @@ class Reputation(commands.Cog):
             except discord.Forbidden:
                 print("rep -> I lack manage messages permissions!")
 
-    # TODO: Uncomment the code once the newest version of RedBot is there (probably 3.0.3).
-    # @rep.error
-    # async def rep_error(self, ctx, error):
-    #     """Ensure that input errors cause message deletions"""
-    #     if isinstance(error, commands.BadArgument):
-    #         await ctx.send(self.REP_BAD_INPUT, delete_after=20)
-    #     # Delete the original message.
-    #     await sleep(20)
-    #     try:
-    #         await ctx.message.delete()
-    #     except discord.Forbidden:
-    #         print("rep_error -> I lack manage messages permissions!")
+    @rep.error
+    async def rep_error(self, ctx, error):
+        """Ensure that input errors cause message deletions"""
+        if isinstance(error, commands.BadArgument):
+            await ctx.send(self.REP_BAD_INPUT, delete_after=30)
+        # Delete the original message.
+        await sleep(20)
+        try:
+            await ctx.message.delete()
+        except discord.Forbidden:
+            print("rep_error -> I lack manage messages permissions!")
 
     @commands.command(name="reps", aliases=["rep_count"])
     async def rep_count(self, ctx: Context, user: discord.Member = None):

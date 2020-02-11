@@ -1,11 +1,13 @@
 # Default library.
 import asyncio
 from collections import OrderedDict
-from typing import List, Optional, Tuple
+from typing import Dict, List, Optional
 
 # Used by Red.
 import aiohttp
-from redbot.core import Config
+
+# Local imports.
+from .exceptions import PsyonixCallError
 
 
 class PsyonixCalls:
@@ -34,10 +36,9 @@ class PsyonixCalls:
     # Other errors.
     NO_MATCHES = ERROR + "This account has purchased Rocket League, but has no online matches on record!"
 
-    def __init__(self, cog):
+    def __init__(self, config):
         # Load config in order to always have an updated token.
-        self.config = Config.get_conf(cog, identifier=80590423, force_registration=True)
-        self.config.register_global(psy_token=None, steam_token=None)
+        self.config = config
         self.session = aiohttp.ClientSession()
 
     async def _fetch(self, request_url, headers) -> (Optional[List[dict]], int):
@@ -51,41 +52,36 @@ class PsyonixCalls:
                 resp_json = None
         return resp_json, resp_status
 
-    async def call_psyonix_api(self, request_url: str) -> Tuple[Optional[dict], Optional[str]]:
+    async def _call_psyonix_api(self, request_url: str) -> dict:
         """Given an url, call the API using the configured token
 
         Returns a list if valid, False if invalid, and None if there is no token.
         Also returns a error if there is one."""
-        to_return = None
         token = await self.config.psy_token()
         if token is None:
-            error = self.PSY_TOKEN_NONE
+            raise PsyonixCallError(self.PSY_TOKEN_NONE)
+        headers = {"Authorization": token}
+        try:
+            resp_json, resp_status = await self._fetch(request_url, headers)
+        except aiohttp.client_exceptions.ServerTimeoutError:
+            raise PsyonixCallError(self.TIMEOUT_ERROR)
+        if resp_status == 200:  # TODO: test if «resp_json is not None» is needed.
+            if isinstance(resp_json, list):
+                resp_json = resp_json[0]
+            to_return = resp_json
         else:
-            headers = {"Authorization": token}
-            try:
-                resp_json, resp_status = await self._fetch(request_url, headers)
-            except aiohttp.client_exceptions.ServerTimeoutError:
-                error = self.TIMEOUT_ERROR
-            else:
-                if resp_json is not None:
-                    if isinstance(resp_json, list):
-                        resp_json = resp_json[0]
-                    to_return = resp_json
-                    error = None
-                else:
-                    if resp_status == 401:
-                        error = self.PSY_TOKEN_INVALID
-                    elif resp_status == 400:
-                        error = self.PLAYER_ERROR
-                    elif resp_status in {500, 502}:
-                        error = self.SERVER_ERROR.format(resp_status)
-                    else:
-                        error = self.UNKNOWN_STATUS_ERROR.format(resp_status)
-                        print(request_url)
-        return to_return, error
+            if resp_status == 401:
+                raise PsyonixCallError(self.PSY_TOKEN_INVALID)
+            if resp_status == 400:
+                raise PsyonixCallError(self.PLAYER_ERROR)
+            if resp_status in {500, 502}:
+                raise PsyonixCallError(self.SERVER_ERROR.format(resp_status))
+            print(request_url)
+            raise PsyonixCallError(self.UNKNOWN_STATUS_ERROR.format(resp_status))
+        return to_return
 
     async def player_skills(self, platform: str, valid_id,
-                            ensure_played: bool = False) -> Tuple[Optional[dict], Optional[str]]:
+                            ensure_played: bool = False) -> Optional[dict]:  # TODO: Check if optional
         """Composes the PlayerSkills query call, and returns its response
 
         if ensure_played is True, there will be a notice if the player_skills value is an empty list.
@@ -100,47 +96,45 @@ class PsyonixCalls:
         Note: the original response has the dict wrapped in a list, but the call method removes it.
         """
         request_url = self.API_RANK.format(p=platform, uid=valid_id)
-        to_return, notice = await self.call_psyonix_api(request_url)
-        if ensure_played and to_return and not to_return.get("player_skills"):
-            notice = self.NO_MATCHES
-        return to_return, notice
+        to_return = await self._call_psyonix_api(request_url)
+        skills: List[Dict[str, Optional[float]]] = to_return.get("player_skills") if to_return else None
+        if ensure_played and not skills:
+            raise PsyonixCallError(self.NO_MATCHES)
+        elif skills:  # Skills exist, replace nulls with 0. TODO: Maybe build in exception for raw.
+            for d in skills:
+                for k, v in d.items():
+                    if v is None:
+                        d[k] = 0
+        return to_return
 
-    async def player_titles(self, platform: str, valid_id) -> Tuple[Optional[dict], Optional[str]]:
+    async def player_titles(self, platform: str, valid_id) -> Optional[dict]:
         """Composes the PlayerTitles query call, and returns its response
 
         Structure of a normal API response:
         {titles: [list of titles]}
         """
         request_url = self.API_TITLES.format(p=platform, uid=valid_id)
-        response, notice = await self.call_psyonix_api(request_url)
-        if notice:
-            to_return = False
-        else:
-            to_return = response.get("titles", False)
-        return to_return, notice
+        response = await self._call_psyonix_api(request_url)
+        return response.get("titles")
 
-    async def player_stat_values(self, platform: str, valid_id) -> (Optional[OrderedDict], Optional[str]):
+    async def player_stat_values(self, platform: str, valid_id) -> OrderedDict:
         """Get all the six stats for a player: wins, MVPs, goals, assists, saves, and shots
 
         Structure of a normal API response (per individual stat):
         {user_id: str, stat_type: str, value: str}
         """
-        to_return = None
         token = await self.config.psy_token()
         if token is None:
-            error = self.PSY_TOKEN_NONE
-        else:
-            headers = {"Authorization": token}
-            tasks = []
-            for i in self.GAS_LIST:
-                url = self.API_GAS.format(p=platform, t=i, uid=valid_id)
-                task = asyncio.ensure_future(self._fetch(url, headers))
-                tasks.append(task)
-            responses = await asyncio.gather(*tasks)  # Structure: List[Tuple[List[dict]]]
-            if any(status != 200 for d, status in responses):  # One or more values does not have status 200.
-                error = self.LOOP_NOT_ALL_200
-                print(responses)
-            else:  # Unpack gas-values to an OrderedDict.
-                to_return = OrderedDict((d["stat_type"], int(d["value"])) for (d,), status in responses)
-                error = None
-        return to_return, error
+            raise PsyonixCallError(self.PSY_TOKEN_NONE)
+        headers = {"Authorization": token}
+        tasks = []
+        for i in self.GAS_LIST:
+            url = self.API_GAS.format(p=platform, t=i, uid=valid_id)
+            task = asyncio.ensure_future(self._fetch(url, headers))
+            tasks.append(task)
+        responses = await asyncio.gather(*tasks)  # Structure: List[Tuple[List[dict]]]
+        if any(status != 200 for d, status in responses):  # One or more values does not have status 200.
+            print(responses)
+            raise PsyonixCallError(self.LOOP_NOT_ALL_200)
+        # Unpack gas-values to an OrderedDict.
+        return OrderedDict((d["stat_type"], int(d["value"])) for (d,), status in responses)
