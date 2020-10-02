@@ -2,7 +2,7 @@
 import asyncio
 import datetime as dt
 from asyncio import sleep
-from typing import Optional, Tuple, Set
+from typing import Literal, Optional, Tuple, Set
 
 # Used by Red.
 import discord
@@ -30,6 +30,9 @@ class Reputation(commands.Cog):
     ERROR = ":x: Error: "
     DONE = ":white_check_mark: "
     # Notices.
+    DEL_REQUEST = ":information_source: `reputation`: Data removal request for userID {} of type `{}`.\n" \
+                  "Please consider deleting unnecessary data (such as usernames, and the reputation message itself), " \
+                  "whilst not deleting data necessary for the operation of the reputation system."
     BAD_CHANNEL = ERROR + "Reputation not added, please use the correct channel for reputations!"
     REP_CHANNEL_CLEARED = BIN + "Cleared the channel configuration. Reputation can now be given in any channel."
     LOG_CHANNEL_CLEARED = BIN + "Cleared the channel configuration. Logs are disabled."
@@ -446,6 +449,17 @@ class Reputation(commands.Cog):
                 await red_menu.menu(ctx, embed_list, red_menu.DEFAULT_CONTROLS, timeout=30.0)
 
     # Utilities
+    async def red_delete_data_for_user(
+        self,
+        *,
+        requester: Literal["discord_deleted_user", "owner", "user", "user_strict"],
+        user_id: int,
+    ):
+        """Delete someone's linked account (only info stored)
+
+        This does not take care of any rank roles that the user may have."""
+        await self.bot.send_to_owners(self.DEL_REQUEST.format(user_id, requester))
+
     async def user_role_check(self, ctx: Context, member: discord.Member = None) -> None:
         """
         :param ctx: The Context object of the message that requests the check

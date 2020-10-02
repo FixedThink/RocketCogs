@@ -1,8 +1,10 @@
 {
   "author": ["#s#8059"],
   "description": "Check your competitive ranks, exact skill rating, mu, sigma, for all playlists. Additionally, allow users to link their account for easy stat viewing. If configured, the account links may be used to give a user a role according to their highest rank.",
+  "end_user_data_statement": "The only user data stored is a user's player tag, only if explicitly provided by the user itself. A user always has the ability to unlink their player tag through a bot command, without the need of a data removal request.",
   "install_msg": "Thanks for installing my cog! Keep in mind that in order to use this cog, you must have a valid Psyonix API token, and a valid Steam API token.",
   "short": "Check your Rocket League stats!",
+  "min_bot_version": "3.4.0",
   "name": "LaFusee",
   "disabled": false,
   "requirements" : ["aiosqlite"],

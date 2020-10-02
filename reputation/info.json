@@ -1,8 +1,10 @@
 {
   "author": ["#s#8059", "HRAND5#0101"],
   "description": "This cog allows members to give other members reputation. This reputation will then be stored in a database. Based on the database, further things can be done. For example, a leaderboard for the people with the most reps can be shown, people can look up their own reputation, and people that have a sufficient amount of reputation and have recently received reputation could also obtain a role (configurable).",
+  "end_user_data_statement": "This module stores all +rep messages, their timestamp, and the username+ID of the source and target. Due to possible operational hazards when automatically deleting reputations, any removal requests must be treated manually, and must ensure abuse is prevented.",
   "install_msg": "Thank you for installing our cog!",
   "short": "Give people reputation and reward reputable members",
+  "min_bot_version": "3.4.0",
   "name": "Reputation",
   "disabled": false,
   "requirements": ["aiosqlite"],

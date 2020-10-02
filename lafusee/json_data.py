@@ -81,7 +81,7 @@ class GetJsonData:
         :return: tier name
         """
         key, div = divmod((tier_n + 2), 3)
-        if key in (0, 7):
+        if key in (0, 8):
             to_return = self.divmod_tiers[key]
         else:
             to_return = " ".join((self.divmod_tiers[key], self.roman_nums[div + 1]))

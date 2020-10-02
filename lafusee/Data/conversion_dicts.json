@@ -7,7 +7,8 @@
     "4": "0x10bbee",
     "5": "0x0077ff",
     "6": "0xaa60dd",
-    "7": "0xbb00bb"
+    "7": "0xbb00bb",
+    "8": "0xff44ee"
   },
   "platform_convert" : {
     "pc_names" : ["pc", "steam"],
@@ -48,7 +49,8 @@
     "sn" : 30,
     "sd" : 30,
     "snowday" : 30,
-    "hockey" : 30
+    "hockey" : 30,
+    "tournament" : 34
   },
   "playlist_names" : {
     "long" : {
@@ -60,7 +62,8 @@
       "27": "Ranked Hoops",
       "28": "Ranked Rumble",
       "29": "Ranked Dropshot",
-      "30": "Ranked Snowday"
+      "30": "Ranked Snowday",
+      "34": "Ranked Tournament"
     },
     "medium" : {
       "0": "Casual",
@@ -71,7 +74,8 @@
       "27": "Hoops",
       "28": "Rumble",
       "29": "Dropshot",
-      "30": "Snowday"
+      "30": "Snowday",
+      "34": "Tourney"
     },
     "short" : {
       "0": "Casual",
@@ -82,7 +86,8 @@
       "27": "hs",
       "28": "rb",
       "29": "ds",
-      "30": "sd"
+      "30": "sd",
+      "34": "tr"
     }
   },
   "roman_numerals" : {
@@ -99,7 +104,8 @@
     "4": "Platinum",
     "5": "Diamond",
     "6": "Champion",
-    "7": "Grand Champion"
+    "7": "Grand Champion",
+    "8": "Supersonic Legend"
   },
   "tier_icons" : {
     "0" : "https://cdn.discordapp.com/attachments/743539360028295168/743540277477769298/Unranked.png",
@@ -121,6 +127,9 @@
     "16" : "https://cdn.discordapp.com/attachments/743539360028295168/743541568149127179/Champ_I.png",
     "17" : "https://cdn.discordapp.com/attachments/743539360028295168/743541612092850176/Champ_II.png",
     "18" : "https://cdn.discordapp.com/attachments/743539360028295168/743541664601210940/Champ_III.png",
-    "19" : "https://cdn.discordapp.com/attachments/743539360028295168/743541727897321573/Grand_Champion.png"
+    "19" : "https://cdn.discordapp.com/attachments/697293171679297586/757063896094736474/GC1.png",
+    "20" : "https://cdn.discordapp.com/attachments/697293171679297586/757063910510821426/GC2.png",
+    "21" : "https://cdn.discordapp.com/attachments/697293171679297586/757063921134731314/GC3.png",
+    "22" : "https://cdn.discordapp.com/attachments/697293171679297586/757063941292556358/SSLegend.png"
     }
 }

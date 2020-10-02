@@ -2,7 +2,7 @@
 import re
 from collections import OrderedDict
 from json import dumps  # Only used for debug output formatting.
-from typing import List, Optional
+from typing import List, Literal, Optional
 
 # Used by Red.
 import discord
@@ -52,10 +52,10 @@ class LaFusee(commands.Cog):
     R_CONF_INCOMPLETE = "You can either add each missing role individually using {}, " \
                         "or rerun this command when all roles are set up."
     R_GENERATE_NO_PERMS = ERROR + "I do not have sufficient permissions to add roles"
-    R_GENERATE_PROGRESS = "{n} out of 19 roles done."
+    R_GENERATE_PROGRESS = "{n} out of 22 roles done."
     R_DETECT_SUCCESS = DONE + "Detected `{role_id}` for {tier_str}"
     R_DETECT_FAIL = ":x: Did not find a role for {tier_str}"
-    R_DETECT_TOTAL = "**Total matches:** {match_count} out of 19\n{note}\n\n{rest}"
+    R_DETECT_TOTAL = "**Total matches:** {match_count} out of 22\n{note}\n\n{rest}"
     # Account registration + rank role update constants.
     LINKED_UNRANKED = "Your linked account is (currently) unranked in every playlist."
     RANK_ROLE_ADDED = "You received the {r_role} role."
@@ -99,7 +99,7 @@ class LaFusee(commands.Cog):
                     "**XBOX** – Use your player tag. If it has spaces, surround it with quotes."
     INFO_FOOTER = "If any input is invalid though it should be valid, please reach out to the developer!"
     # Assertion error constants.
-    ASSERT_INT = "LaFusee: Invalid int for tier: {n} is not an integer between 0 and 19 inclusive."
+    ASSERT_INT = "LaFusee: Invalid int for tier: {n} is not an integer between 0 and 22 inclusive."
     ASSERT_ROLE_CONFIG = "LaFusee: The role for tier {n} is not configured."
     ASSERT_ROLE_EXISTS = "LaFusee: The role with ID {r_id} ({tier_n}) does not exist."
     # Embed row constants. Padding character (\u2800) is a Braille space, and spacing is an en space (\u2002).
@@ -244,7 +244,7 @@ class LaFusee(commands.Cog):
             role_dict = {}
             say_list = []
             matches = 0
-            for i in range(1, 20):
+            for i in range(1, 23):
                 tier_str = self.json_conv.get_tier_name(i)
                 role = discord.utils.get(gld.roles, name=tier_str)
                 if role:
@@ -255,7 +255,7 @@ class LaFusee(commands.Cog):
                 else:  # No role found.
                     role_dict[i] = None
                     say_list.append(self.R_DETECT_FAIL.format(tier_str=tier_str))
-            if matches < 19:
+            if matches < 22:
                 comment = self.R_CONF_INCOMPLETE.format("`SoonTM`")  # TODO: add manual command.
             elif await self.config.guild(gld).rankrole_enabled() is False:
                 comment = self.R_CONF_NOT_ENABLED.format(com(ctx, self.toggle_rl_role))
@@ -543,6 +543,19 @@ class LaFusee(commands.Cog):
         await ctx.send(to_say)
 
     # Utilities
+    async def red_delete_data_for_user(
+        self,
+        *,
+        requester: Literal["discord_deleted_user", "owner", "user", "user_strict"],
+        author_id: int,
+    ):
+        """Delete someone's linked account (only info stored)
+
+        This does not take care of any rank roles that the user may have."""
+        url_platform, url_id = await self.link_db.select_user(author_id)
+        if url_platform or url_id:  # Nothing linked.
+            await self.link_db.delete_user(author_id)
+
     async def check_token_fmt(self, ctx: commands.Context, token: str, expected_token_length: int) -> None:
         """Check if a token is hexadecimal and a proper length. Return None if so, raise error otherwise"""
         msg = ctx.message
@@ -569,10 +582,10 @@ class LaFusee(commands.Cog):
     async def update_member_rankroles(self, gld: discord.Guild, mem: discord.Member, add_tier: int = None) -> str:
         """Update the rank roles of a user
 
-        add_tier must be either an int between 0-19 inclusive, or None.
+        add_tier must be either an int between 0-22 inclusive, or None.
         If add_tier is None, all rank roles will be removed.
         Otherwise, the add_tier will be kept, or added in case the member did not have it."""
-        assert add_tier is None or (type(add_tier) == int and 0 <= add_tier <= 19), self.ASSERT_INT.format(n=add_tier)
+        assert add_tier is None or (type(add_tier) == int and 0 <= add_tier <= 22), self.ASSERT_INT.format(n=add_tier)
         rankrole_dict = await self.config.guild(gld).rankrole_dict()
         rankrole_ids = {r_id for r_id in rankrole_dict.values() if r_id is not None}
 

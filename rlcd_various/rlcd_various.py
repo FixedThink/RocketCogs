@@ -212,7 +212,7 @@ class RlcdVarious(Cog):
     # Main commands.
     @commands.guild_only()
     @commands.command()
-    @commands.cooldown(1, 60 * 10, type=commands.cooldowns.BucketType.channel)  # 1 message per 10 minutes.
+    @commands.cooldown(1, 60 * 10, type=commands.BucketType.channel)  # 1 message per 10 minutes.
     async def lobby(self, ctx: commands.Context, region: str, lobby_name: str, password: str, *, optional_text=None):
         """Create an invite message for an inhouses lobby
 
@@ -348,3 +348,5 @@ class RlcdVarious(Cog):
             await ctx.send(notice)
 
     # Utilities
+    async def red_delete_data_for_user(self, **kwargs):
+        pass  # No user data stored.

@@ -8,7 +8,8 @@ def _use_plist(check_d: dict, ignore_special: bool = False) -> bool:
     :return: A boolean determining whether the playlist should be considered.
     """
     to_check = check_d["playlist"]
-    return to_check != 0 if not ignore_special else 0 < to_check < 20
+    # return to_check != 0 if not ignore_special else 0 < to_check < 20
+    return (to_check not in (0, 34)) if not ignore_special else 0 < to_check < 20
 
 
 def best_playlist(player_skills: list, ignore_special: bool = False) -> Tuple[int, Optional[int], set]:
