@@ -8,6 +8,8 @@ which is a bot using the latest version of discord.py.
 
 ## LaFusee
 
+### WARNING: THIS CODE IS OUTDATED!!! IT USES THE OLD (PRE-EPIC) PSYONIX API.
+
 La Fusée (French for *The Rocket*) is the project name for the cog that contains various commands related to Rocket League user stats. 
 The cog is based on two RedBot V2 modules used on the [Rocket League Coaching Discord](https://www.rlcd.gg/) (RankCog and SetProfile). 
 However, it is rewritten from scratch, and unified in order to make additional features possible.
